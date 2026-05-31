@@ -13,24 +13,14 @@ from promptbase_exporter.models import Profile
 
 
 class PaginationTests(unittest.TestCase):
-    def test_run_query_all_fetches_until_short_page(self):
-        page_one = [{"slug": "a"}, {"slug": "b"}]
-        page_two = [{"slug": "c"}]
-
-        with patch(
-            "promptbase_exporter.client._run_query",
-            side_effect=[page_one, page_two],
-        ) as query:
-            docs = _run_query_all(
+    def test_run_query_all_requires_order_by(self):
+        with self.assertRaises(ValueError):
+            _run_query_all(
                 "Items",
                 [field_filter("uid", "EQUAL", {"stringValue": "uid-1"})],
+                order_by=[],
                 page_size=2,
             )
-
-        self.assertEqual(docs, [{"slug": "a"}, {"slug": "b"}, {"slug": "c"}])
-        self.assertEqual(query.call_count, 2)
-        self.assertEqual(query.call_args_list[0].kwargs["offset"], 0)
-        self.assertEqual(query.call_args_list[1].kwargs["offset"], 2)
 
     def test_run_query_all_uses_cursor_for_ordered_pages(self):
         page_one = [

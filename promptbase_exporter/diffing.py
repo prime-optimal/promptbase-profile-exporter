@@ -13,6 +13,10 @@ from .models import PromptRecord
 
 COMPARE_FIELDS = ("title", "description", "type", "domain", "price")
 
+# Whitespace collapse runs once per compared field of every changed-candidate
+# record, so compile it once rather than per call.
+_WHITESPACE_RE = re.compile(r"\s+")
+
 
 @dataclass(frozen=True)
 class ChangedRecord:
@@ -217,7 +221,8 @@ def _comparable_value(value: Any) -> str:
         return ""
     if isinstance(value, float):
         return f"{value:g}"
-    return re.sub(r"\s+", " ", str(value).replace("\r\n", "\n").replace("\r", "\n")).strip()
+    normalized = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    return _WHITESPACE_RE.sub(" ", normalized).strip()
 
 
 def _metadata_missing(value: Any) -> bool:
