@@ -7,6 +7,7 @@ from promptbase_exporter.client import (
     _run_query_all,
     fetch_prompts,
     field_filter,
+    resolve_profile,
 )
 from promptbase_exporter.models import Profile
 
@@ -156,6 +157,19 @@ class FetchPromptTests(unittest.TestCase):
         self.assertEqual([record.domain for record in records], ["text", "image"])
         self.assertEqual(sum(record.is_text for record in records), 1)
         self.assertEqual(sum(record.is_image for record in records), 1)
+
+
+class ResolveProfileTests(unittest.TestCase):
+    def test_resolve_profile_rejects_ambiguous_profile_uids(self):
+        with patch(
+            "promptbase_exporter.client._run_query",
+            return_value=[
+                {"username": "acb", "uid": "uid-1"},
+                {"username": "acb", "uid": "uid-2"},
+            ],
+        ):
+            with self.assertRaisesRegex(PromptBaseError, "Ambiguous profile"):
+                resolve_profile("@acb")
 
 
 if __name__ == "__main__":

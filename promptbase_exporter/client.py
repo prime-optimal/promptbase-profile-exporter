@@ -232,11 +232,26 @@ def resolve_profile(profile_input: str) -> Profile:
     if not docs:
         raise PromptBaseError(f"Profile not found: {username}")
 
-    profile_doc = docs[0]
-    uid = profile_doc.get("uid") or profile_doc.get("id") or profile_doc.get("itemId")
+    matching_docs = [
+        doc for doc in docs if str(doc.get("username") or "").strip() == username
+    ]
+    if not matching_docs:
+        raise PromptBaseError(f"Profile not found with exact username: {username}")
+
+    uid_by_doc = [
+        str(uid)
+        for doc in matching_docs
+        if (uid := doc.get("uid") or doc.get("id") or doc.get("itemId"))
+    ]
+    distinct_uids = sorted(set(uid_by_doc))
+    if len(distinct_uids) > 1:
+        raise PromptBaseError(
+            f"Ambiguous profile lookup for {username}: multiple profile UIDs matched."
+        )
+    uid = distinct_uids[0] if distinct_uids else ""
     if not uid:
         raise PromptBaseError(f"Profile UID could not be resolved: {username}")
-    return Profile(username=username, uid=str(uid))
+    return Profile(username=username, uid=uid)
 
 
 def fetch_prompt_items(profile: Profile) -> list[dict[str, Any]]:
