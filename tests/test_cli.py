@@ -256,5 +256,74 @@ class CliTests(unittest.TestCase):
         self.assertIn("promptbase-export", stdout.getvalue())
 
 
+class WriteFailureTests(unittest.TestCase):
+    """Filesystem write failures must surface as clean errors, not tracebacks."""
+
+    def _fetch(self):
+        return patch(
+            "promptbase_exporter.cli.fetch_prompts",
+            return_value=(Profile(username="acb", uid="uid-1"), [record("A", "text", "gpt")]),
+        )
+
+    def test_directory_export_write_failure_reports_error(self):
+        with self._fetch(), patch(
+            "promptbase_exporter.cli.write_export",
+            side_effect=OSError("disk full"),
+        ):
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(["@acb", "--mode", "all"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("could not write export", stderr.getvalue())
+        self.assertIn("disk full", stderr.getvalue())
+
+    def test_single_file_write_failure_reports_error(self):
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "catalog.json"
+            with self._fetch(), patch(
+                "promptbase_exporter.cli.write_export_to_path",
+                side_effect=OSError("read-only file system"),
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = main(
+                        ["@acb", "--mode", "all", "--output-file", str(output_path)]
+                    )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("could not write", stderr.getvalue())
+        self.assertIn("read-only file system", stderr.getvalue())
+
+    def test_diff_report_write_failure_reports_error(self):
+        with TemporaryDirectory() as directory:
+            previous_path = Path(directory) / "previous.json"
+            previous_path.write_text("[]\n", encoding="utf-8")
+            diff_path = Path(directory) / "out" / "diff.md"
+            with self._fetch(), patch(
+                "promptbase_exporter.cli.write_diff_report",
+                side_effect=OSError("permission denied"),
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = main(
+                        [
+                            "@acb",
+                            "--mode",
+                            "all",
+                            "--compare",
+                            str(previous_path),
+                            "--diff-output",
+                            str(diff_path),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("could not write diff report", stderr.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
