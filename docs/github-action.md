@@ -113,6 +113,23 @@ jobs:
 | `upload-artifact` | `true` | Upload the output directory with `actions/upload-artifact`. |
 | `artifact-name` | `promptbase-exports` | Name of the uploaded artifact. |
 
+## Outputs
+
+| Output | Description |
+| --- | --- |
+| `output-dir` | Directory containing the generated export files (echoes the `output-dir` input). |
+| `artifact-name` | Name of the uploaded artifact (echoes the `artifact-name` input). |
+
+Reference them from later steps via `steps.<step-id>.outputs.output-dir`:
+
+```yaml
+- id: export
+  uses: IACBI/promptbase-profile-exporter@main
+  with:
+    profile-url: https://promptbase.com/profile/acb
+- run: ls -R "${{ steps.export.outputs.output-dir }}"
+```
+
 ## Examples
 
 Export only text prompts to CSV:
