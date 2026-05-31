@@ -343,6 +343,18 @@ If descriptions are missing for any prompt, the command finishes with a non-zero
 
 The exporter also checks for expected public data fields. If PromptBase changes its public data model, the command reports a schema-change error instead of silently producing a misleading catalog.
 
+## Exit Codes
+
+The `promptbase-export` command uses these exit codes so it can be scripted in CI:
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Success (including a clean `--compare` with no differences). |
+| `1` | Error: invalid arguments, profile not found, no matching prompts, missing descriptions without `--allow-missing-descriptions`, or a write/validation failure. |
+| `2` | `--fail-on-diff` was set and `--compare`/`--update-file` found added, removed, or changed records. |
+
+Use code `2` to gate a pipeline on catalog drift; the GitHub Action exposes this through its `fail-on-diff` input.
+
 ## How It Works
 
 PromptBase is a dynamic site backed by public Firebase/Firestore data. This tool reads the same public data used by the profile and prompt pages:
