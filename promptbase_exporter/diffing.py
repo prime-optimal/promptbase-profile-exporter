@@ -130,7 +130,8 @@ def write_diff_report(path: Path, diff: CatalogDiff) -> Path:
 
 def _parse_text_catalog(text: str) -> list[dict[str, str]]:
     pattern = re.compile(
-        r"(?ms)^\d+\.\s*\nTitle:\s*(?P<title>.*?)\nDescription:\n(?P<description>.*?)(?=^\d+\.\s*$|\Z)"
+        r"(?ms)^\d+\.\s*\nTitle:\s*(?P<title>.*?)\nDescription:\n"
+        r"(?P<description>.*?)(?=^\d+\.\s*\nTitle:|\Z)"
     )
     return [
         {
@@ -142,7 +143,7 @@ def _parse_text_catalog(text: str) -> list[dict[str, str]]:
 
 
 def _parse_markdown_catalog(text: str) -> list[dict[str, str]]:
-    sections = re.split(r"(?m)^## \d+\. ", text)
+    sections = re.split(r"(?m)^## \d+\. (?=.*\n\n- URL:)", text)
     records: list[dict[str, str]] = []
     for section in sections[1:]:
         lines = section.splitlines()

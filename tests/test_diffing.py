@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from promptbase_exporter.diffing import compare_catalogs, format_diff_report, load_catalog
+from promptbase_exporter.formatting import write_export
 from promptbase_exporter.models import PromptRecord
 
 
@@ -71,6 +72,54 @@ class DiffingTests(unittest.TestCase):
         self.assertIn("# PromptBase Catalog Diff", report)
         self.assertIn("- Added: 1", report)
         self.assertIn("## Added", report)
+
+    def test_load_catalog_round_trips_supported_export_formats(self):
+        records = [
+            record("Alpha", "Alpha description"),
+            record("Beta", "Beta description"),
+        ]
+        with TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            for export_format in ("txt", "markdown", "json", "csv"):
+                output_path = write_export(output_dir, "acb", "all", records, export_format)
+
+                loaded = load_catalog(output_path)
+
+                self.assertEqual([item["title"] for item in loaded], ["Alpha", "Beta"])
+                self.assertEqual(
+                    [item["description"] for item in loaded],
+                    ["Alpha description", "Beta description"],
+                )
+
+    def test_load_text_catalog_ignores_header_like_description_lines(self):
+        records = [
+            record(
+                "Alpha",
+                "Alpha description\n5.\nStill part of Alpha.",
+            )
+        ]
+        with TemporaryDirectory() as directory:
+            output_path = write_export(Path(directory), "acb", "all", records, "txt")
+
+            loaded = load_catalog(output_path)
+
+        self.assertEqual(len(loaded), 1)
+        self.assertIn("Still part of Alpha.", loaded[0]["description"])
+
+    def test_load_markdown_catalog_ignores_header_like_description_lines(self):
+        records = [
+            record(
+                "Alpha",
+                "Alpha description\n\n## 5. Still part of Alpha\nMore details.",
+            )
+        ]
+        with TemporaryDirectory() as directory:
+            output_path = write_export(Path(directory), "acb", "all", records, "markdown")
+
+            loaded = load_catalog(output_path)
+
+        self.assertEqual(len(loaded), 1)
+        self.assertIn("## 5. Still part of Alpha", loaded[0]["description"])
 
 
 if __name__ == "__main__":

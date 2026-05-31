@@ -139,6 +139,31 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("- Added: 1", stdout.getvalue())
 
+    def test_update_file_rewrites_even_when_fail_on_diff_returns_two(self):
+        records = [record("New", "text", "gpt")]
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "catalog.txt"
+            output_path.write_text("", encoding="utf-8")
+            stdout = io.StringIO()
+            with patch(
+                "promptbase_exporter.cli.fetch_prompts",
+                return_value=(Profile(username="acb", uid="uid-1"), records),
+            ), redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "@acb",
+                        "--mode",
+                        "all",
+                        "--update-file",
+                        str(output_path),
+                        "--fail-on-diff",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn("- Added: 1", stdout.getvalue())
+            self.assertIn("Title: New", output_path.read_text(encoding="utf-8"))
+
     def test_since_until_and_limit_filter_selected_records(self):
         records = [
             record(

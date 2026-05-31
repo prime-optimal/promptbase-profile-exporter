@@ -301,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Dry run: no files written.")
         return 0
 
+    diff_exit_code = 0
     if options["compare_path"]:
         diff_exit_code = handle_compare(
             selected_records,
@@ -310,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
             args.fail_on_diff,
             quiet=args.quiet,
         )
-        if diff_exit_code:
+        if diff_exit_code and not args.update_file:
             return diff_exit_code
 
     if options["output_file"]:
@@ -337,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.quiet:
             print(f"Wrote {mode:>5}: {written_count:>4} prompts -> {output_path}")
             print_summary(selected_records, all_count=len(records))
-        return 0
+        return diff_exit_code
 
     for mode in modes:
         filtered = filter_records(selected_records, mode)
