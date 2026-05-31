@@ -193,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     args.mode = MODE_ALIASES.get(args.mode, args.mode)
 
     try:
-        options = normalize_options(parser, args)
+        options = normalize_options(args)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -210,20 +210,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if not sorted_newest_to_oldest(records):
         print("error: prompt records are not sorted newest to oldest", file=sys.stderr)
-        return 1
-
-    if args.min_price is not None and args.min_price < 0:
-        print("error: --min-price cannot be negative", file=sys.stderr)
-        return 1
-    if args.max_price is not None and args.max_price < 0:
-        print("error: --max-price cannot be negative", file=sys.stderr)
-        return 1
-    if (
-        args.min_price is not None
-        and args.max_price is not None
-        and args.min_price > args.max_price
-    ):
-        print("error: --min-price cannot be greater than --max-price", file=sys.stderr)
         return 1
 
     selected_records = filter_records_by_metadata(
@@ -376,9 +362,19 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def normalize_options(_parser: argparse.ArgumentParser, args: argparse.Namespace) -> dict:
+def normalize_options(args: argparse.Namespace) -> dict:
     if args.limit is not None and args.limit <= 0:
         raise ValueError("--limit must be greater than zero")
+    if args.min_price is not None and args.min_price < 0:
+        raise ValueError("--min-price cannot be negative")
+    if args.max_price is not None and args.max_price < 0:
+        raise ValueError("--max-price cannot be negative")
+    if (
+        args.min_price is not None
+        and args.max_price is not None
+        and args.min_price > args.max_price
+    ):
+        raise ValueError("--min-price cannot be greater than --max-price")
     if args.output_file and args.update_file:
         raise ValueError("--output-file and --update-file cannot be used together")
     if args.timestamp_filenames and (args.output_file or args.update_file):

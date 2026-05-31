@@ -86,7 +86,6 @@ def _run_query(
     *,
     order_by: list[dict[str, Any]] | None = None,
     limit: int = 500,
-    offset: int = 0,
     start_after: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     if not filters:
@@ -111,8 +110,6 @@ def _run_query(
         structured_query["orderBy"] = order_by
     if start_after:
         structured_query["startAt"] = {"values": start_after, "before": False}
-    if offset:
-        structured_query["offset"] = offset
 
     request = urllib.request.Request(
         FIRESTORE_RUN_QUERY,
@@ -158,25 +155,26 @@ def _run_query_all(
     collection: str,
     filters: list[dict[str, Any]],
     *,
-    order_by: list[dict[str, Any]] | None = None,
+    order_by: list[dict[str, Any]],
     page_size: int = DEFAULT_PAGE_SIZE,
 ) -> list[dict[str, Any]]:
+    if not order_by:
+        # Pagination relies on cursors built from the ordering key.
+        raise ValueError("order_by is required for paginated queries.")
     docs: list[dict[str, Any]] = []
     start_after: list[dict[str, Any]] | None = None
-    for page in range(MAX_PAGES):
+    for _ in range(MAX_PAGES):
         page_docs = _run_query(
             collection,
             filters,
             order_by=order_by,
             limit=page_size,
-            offset=0 if order_by else page * page_size,
             start_after=start_after,
         )
         docs.extend(page_docs)
         if len(page_docs) < page_size:
             return docs
-        if order_by:
-            start_after = _cursor_values_for_doc(page_docs[-1], order_by)
+        start_after = _cursor_values_for_doc(page_docs[-1], order_by)
     raise PromptBaseError(
         f"Query exceeded the pagination safety limit of {MAX_PAGES * page_size} records."
     )

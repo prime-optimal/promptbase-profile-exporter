@@ -193,6 +193,21 @@ If installed with the project script:
 promptbase-export-web
 ```
 
+### Web UI security model
+
+The web UI is intended for **local, single-user** use:
+
+- It binds to `127.0.0.1` (loopback) by default and is unauthenticated.
+  The `/export` endpoint fetches remote data and writes files, so do not
+  expose it to untrusted networks. Passing `--host 0.0.0.0` prints a
+  warning because it makes that endpoint reachable by other hosts.
+- Requests to `/export` are checked for a matching `Host` header and a
+  same-origin `Origin`/`Sec-Fetch-Site`, mitigating CSRF and DNS-rebinding
+  from pages opened in your browser.
+- Exports are confined to the directory the server was started in. Absolute
+  paths and `..` traversal in the "Output directory" field are rejected.
+  (The CLI, which you run yourself, still accepts arbitrary paths.)
+
 ## Output Formats
 
 The default `.txt` file uses a simple numbered format:
@@ -327,6 +342,18 @@ Before writing files, the tool checks that:
 If descriptions are missing for any prompt, the command finishes with a non-zero exit code unless `--allow-missing-descriptions` is used.
 
 The exporter also checks for expected public data fields. If PromptBase changes its public data model, the command reports a schema-change error instead of silently producing a misleading catalog.
+
+## Exit Codes
+
+The `promptbase-export` command uses these exit codes so it can be scripted in CI:
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Success (including a clean `--compare` with no differences). |
+| `1` | Error: invalid arguments, profile not found, no matching prompts, missing descriptions without `--allow-missing-descriptions`, or a write/validation failure. |
+| `2` | `--fail-on-diff` was set and `--compare`/`--update-file` found added, removed, or changed records. |
+
+Use code `2` to gate a pipeline on catalog drift; the GitHub Action exposes this through its `fail-on-diff` input.
 
 ## How It Works
 

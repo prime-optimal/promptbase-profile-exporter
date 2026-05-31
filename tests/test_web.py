@@ -1,15 +1,35 @@
+import io
 import unittest
+from contextlib import redirect_stderr
+from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from promptbase_exporter.models import Profile, PromptRecord
 from promptbase_exporter.web import (
     ExportRequest,
+    PromptBaseWebHandler,
     WebInputError,
+    _warn_if_exposed,
     build_request_config,
     render_form,
     run_export,
 )
+
+
+class _FakeServer:
+    def __init__(self, address):
+        self.server_address = address
+
+
+def _make_handler(headers, address=("127.0.0.1", 8765)):
+    handler = PromptBaseWebHandler.__new__(PromptBaseWebHandler)
+    message = Message()
+    for key, value in headers.items():
+        message[key] = value
+    handler.headers = message
+    handler.server = _FakeServer(address)
+    return handler
 
 
 def record(title, domain, prompt_type, created=1, price=0.0, description=None):
@@ -42,7 +62,7 @@ class WebTests(unittest.TestCase):
                 "until": ["2026-12-31"],
                 "timestamp_filenames": ["1"],
                 "allow_missing_descriptions": ["on"],
-                "output_dir": ["~/exports"],
+                "output_dir": ["exports/acb"],
             }
         )
 
@@ -61,6 +81,18 @@ class WebTests(unittest.TestCase):
         self.assertTrue(config.timestamp_filenames)
         self.assertTrue(config.allow_missing_descriptions)
         self.assertIsInstance(config.output_dir, Path)
+        self.assertTrue(config.output_dir.is_absolute())
+        self.assertTrue(config.output_dir.is_relative_to(Path.cwd().resolve()))
+
+    def test_build_request_config_rejects_output_dir_escape(self):
+        for escape in ("..", "../outside", "../../etc", "exports/../../secrets"):
+            with self.assertRaises(WebInputError):
+                build_request_config({"profile": "acb", "output_dir": escape})
+
+    def test_build_request_config_rejects_absolute_output_dir(self):
+        absolute = "C:\\Windows\\Temp" if Path("C:\\").exists() else "/etc"
+        with self.assertRaises(WebInputError):
+            build_request_config({"profile": "acb", "output_dir": absolute})
 
     def test_build_request_config_rejects_invalid_prices(self):
         with self.assertRaises(WebInputError):
@@ -71,6 +103,11 @@ class WebTests(unittest.TestCase):
                     "max_price": "5",
                 }
             )
+
+    def test_build_request_config_rejects_invalid_dates(self):
+        for field in ("since", "until"):
+            with self.assertRaises(WebInputError):
+                build_request_config({"profile": "acb", field: "not-a-date"})
 
     def test_render_form_contains_expected_controls(self):
         html = render_form(ExportRequest(profile_input="@acb"))
@@ -152,6 +189,57 @@ class WebTests(unittest.TestCase):
 
             with self.assertRaises(WebInputError):
                 run_export(request, fetcher=fetcher)
+
+
+class ExposureWarningTests(unittest.TestCase):
+    def test_no_warning_for_loopback(self):
+        for host in ("127.0.0.1", "localhost", "::1", ""):
+            with redirect_stderr(io.StringIO()) as err:
+                _warn_if_exposed(host)
+            self.assertEqual(err.getvalue(), "")
+
+    def test_warns_for_non_loopback(self):
+        with redirect_stderr(io.StringIO()) as err:
+            _warn_if_exposed("0.0.0.0")
+        self.assertIn("WARNING", err.getvalue())
+
+
+class RequestGuardTests(unittest.TestCase):
+    def test_allows_same_origin_sec_fetch_site(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Sec-Fetch-Site": "same-origin"}
+        )
+        self.assertIsNone(handler._reject_unsafe_request())
+
+    def test_allows_none_sec_fetch_site(self):
+        handler = _make_handler({"Host": "localhost:8765", "Sec-Fetch-Site": "none"})
+        self.assertIsNone(handler._reject_unsafe_request())
+
+    def test_rejects_cross_site_sec_fetch_site(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Sec-Fetch-Site": "cross-site"}
+        )
+        self.assertIsNotNone(handler._reject_unsafe_request())
+
+    def test_rejects_foreign_origin(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Origin": "http://evil.example"}
+        )
+        self.assertIsNotNone(handler._reject_unsafe_request())
+
+    def test_allows_matching_origin(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"}
+        )
+        self.assertIsNone(handler._reject_unsafe_request())
+
+    def test_rejects_rebound_host_header(self):
+        handler = _make_handler({"Host": "attacker.example:8765"})
+        self.assertIsNotNone(handler._reject_unsafe_request())
+
+    def test_allows_non_browser_client_without_headers(self):
+        handler = _make_handler({"Host": "127.0.0.1:8765"})
+        self.assertIsNone(handler._reject_unsafe_request())
 
 
 if __name__ == "__main__":

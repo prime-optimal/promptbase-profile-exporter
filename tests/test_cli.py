@@ -325,5 +325,77 @@ class WriteFailureTests(unittest.TestCase):
         self.assertIn("could not write diff report", stderr.getvalue())
 
 
+class ArgumentValidationTests(unittest.TestCase):
+    """Invalid arguments must fail before any network fetch."""
+
+    def _run_expecting_failure(self, argv):
+        with patch("promptbase_exporter.cli.fetch_prompts") as fetch:
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(argv)
+        fetch.assert_not_called()
+        return exit_code, stderr.getvalue()
+
+    def test_negative_min_price_fails_before_fetch(self):
+        exit_code, stderr = self._run_expecting_failure(["@acb", "--min-price", "-1"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("--min-price cannot be negative", stderr)
+
+    def test_negative_max_price_fails_before_fetch(self):
+        exit_code, stderr = self._run_expecting_failure(["@acb", "--max-price", "-2"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("--max-price cannot be negative", stderr)
+
+    def test_min_price_greater_than_max_fails_before_fetch(self):
+        exit_code, stderr = self._run_expecting_failure(
+            ["@acb", "--min-price", "5", "--max-price", "1"]
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("--min-price cannot be greater than --max-price", stderr)
+
+    def test_non_positive_limit_fails_before_fetch(self):
+        exit_code, stderr = self._run_expecting_failure(["@acb", "--limit", "0"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("--limit must be greater than zero", stderr)
+
+
+class ParseDatetimeTests(unittest.TestCase):
+    def test_empty_value_raises(self):
+        with self.assertRaises(ValueError):
+            parse_datetime_ms("   ", end_of_day=False)
+
+    def test_invalid_value_raises_with_guidance(self):
+        for value in ("not-a-date", "2026-13-01", "2026-02-30"):
+            with self.assertRaises(ValueError) as raised:
+                parse_datetime_ms(value, end_of_day=False)
+            self.assertIn("YYYY-MM-DD", str(raised.exception))
+
+    def test_date_only_start_and_end_of_day_bracket_the_day(self):
+        start = parse_datetime_ms("2026-01-01", end_of_day=False)
+        end = parse_datetime_ms("2026-01-01", end_of_day=True)
+        self.assertLess(start, end)
+        # The bracket stays within a single 24h window.
+        self.assertLess(end - start, 24 * 60 * 60 * 1000)
+
+    def test_date_only_is_interpreted_as_utc_midnight(self):
+        self.assertEqual(
+            parse_datetime_ms("2026-01-01", end_of_day=False),
+            parse_datetime_ms("2026-01-01T00:00:00+00:00", end_of_day=False),
+        )
+
+    def test_naive_datetime_is_assumed_utc(self):
+        self.assertEqual(
+            parse_datetime_ms("2026-01-01T12:00:00", end_of_day=False),
+            parse_datetime_ms("2026-01-01T12:00:00Z", end_of_day=False),
+        )
+
+    def test_timezone_aware_datetime_is_converted_to_utc(self):
+        # 00:00 at +01:00 is the previous day at 23:00 UTC.
+        self.assertEqual(
+            parse_datetime_ms("2026-01-01T00:00:00+01:00", end_of_day=False),
+            parse_datetime_ms("2025-12-31T23:00:00+00:00", end_of_day=False),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
