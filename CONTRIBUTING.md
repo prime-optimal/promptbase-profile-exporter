@@ -22,6 +22,9 @@ python -m unittest discover -s tests
 ```bash
 python -m unittest discover -s tests
 python -m promptbase_exporter --version
+python -m pip install build twine
+python -m build
+python -m twine check dist/*
 ```
 
 ## Manual Network Check
@@ -33,3 +36,7 @@ python -m promptbase_exporter https://promptbase.com/profile/acb --dry-run
 ```
 
 Avoid committing generated `exports/` files.
+
+## Releases
+
+See `RELEASE.md` for the full release checklist.

@@ -10,13 +10,22 @@ from promptbase_exporter.formatting import (
     format_records_as_json,
     format_records_as_markdown,
     format_records_as_text,
+    sort_records,
     sorted_newest_to_oldest,
     write_export,
 )
 from promptbase_exporter.models import PromptRecord
 
 
-def record(title, domain, created, price=0.0, prompt_type=None):
+def record(
+    title,
+    domain,
+    created,
+    price=0.0,
+    prompt_type=None,
+    views=0,
+    sales=0,
+):
     return PromptRecord(
         title=title,
         description=f"{title} description",
@@ -25,6 +34,8 @@ def record(title, domain, created, price=0.0, prompt_type=None):
         domain=domain,
         created=created,
         price=price,
+        views=views,
+        sales=sales,
     )
 
 
@@ -66,25 +77,45 @@ class FormattingTests(unittest.TestCase):
         self.assertIn("1.\nTitle: Text One\nDescription:\nText One description", text)
 
     def test_format_records_as_markdown(self):
-        text = format_records_as_markdown([record("Text One", "text", 1)])
+        text = format_records_as_markdown([record("Text One", "text", 1, views=7, sales=2)])
 
         self.assertIn("# PromptBase Prompt Export", text)
         self.assertIn("## 1. Text One", text)
         self.assertIn("- Domain: text", text)
         self.assertIn("- Price: 0", text)
+        self.assertIn("- Views: 7", text)
+        self.assertIn("- Sales: 2", text)
 
     def test_format_records_as_json(self):
         text = format_records_as_json([record("Text One", "text", 1)])
 
         self.assertIn('"title": "Text One"', text)
         self.assertIn('"domain": "text"', text)
+        self.assertIn('"created_iso": "1970-01-01T00:00:00.001000+00:00"', text)
         self.assertIn('"price": 0.0', text)
 
     def test_format_records_as_csv(self):
         text = format_records_as_csv([record("Text One", "text", 1)])
 
-        self.assertTrue(text.startswith("title,description,slug,url,type,domain,created,price\n"))
+        self.assertTrue(
+            text.startswith(
+                "title,description,slug,url,type,domain,created,created_iso,"
+                "price,discount,views,sales,downloads,favorites,rating,reviews\n"
+            )
+        )
         self.assertIn("Text One", text)
+
+    def test_sort_records(self):
+        records = [
+            record("Beta", "text", 2, price=2, views=5, sales=0),
+            record("Alpha", "text", 3, price=1, views=10, sales=2),
+            record("Gamma", "text", 1, price=3, views=1, sales=5),
+        ]
+
+        self.assertEqual([r.title for r in sort_records(records, "title")], ["Alpha", "Beta", "Gamma"])
+        self.assertEqual([r.title for r in sort_records(records, "oldest")], ["Gamma", "Beta", "Alpha"])
+        self.assertEqual([r.title for r in sort_records(records, "price")], ["Gamma", "Beta", "Alpha"])
+        self.assertEqual([r.title for r in sort_records(records, "views")], ["Alpha", "Beta", "Gamma"])
 
     def test_write_export_counts_records_by_format(self):
         records = [record("Text One", "text", 2), record("Image One", "image", 1)]

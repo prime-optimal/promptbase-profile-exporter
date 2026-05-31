@@ -19,10 +19,12 @@ It is designed for prompt creators who want to back up, audit, share, or publish
 - Accepts a full profile URL, profile path, username, or `@username`.
 - Resolves the profile automatically through public PromptBase data.
 - Exports title and description for every approved prompt.
-- Splits output into `all`, `text`, and `image` views.
+- Splits output into `all`, `text`, and `image` views, with `text-only` and `image-only` aliases.
 - Sorts every export from newest prompt to oldest prompt.
 - Writes `txt`, `markdown`, `json`, or `csv` output.
 - Filters by PromptBase domain, model/type, free/paid status, or price range.
+- Sorts by newest, oldest, title, price, views, sales, downloads, favorites, or rating.
+- Exports richer JSON/CSV metadata such as views, sales, downloads, favorites, rating, and reviews.
 - Can append timestamps to filenames for repeatable backups.
 - Supports dry runs and quick domain/type inventory summaries.
 - Paginates large profiles instead of stopping at the first page.
@@ -76,13 +78,20 @@ python -m promptbase_exporter https://promptbase.com/profile/acb
 Export only text prompts:
 
 ```bash
-python -m promptbase_exporter https://promptbase.com/profile/acb --mode text
+python -m promptbase_exporter https://promptbase.com/profile/acb --mode text-only
 ```
 
 Export only image prompts:
 
 ```bash
-python -m promptbase_exporter https://promptbase.com/profile/acb --mode image
+python -m promptbase_exporter https://promptbase.com/profile/acb --mode image-only
+```
+
+Short aliases are also supported:
+
+```bash
+python -m promptbase_exporter @acb --mode text
+python -m promptbase_exporter @acb --mode image
 ```
 
 Export all prompts into a custom folder:
@@ -119,6 +128,14 @@ Export paid prompts between two prices:
 
 ```bash
 python -m promptbase_exporter @acb --paid-only --min-price 2 --max-price 6
+```
+
+Sort by price, views, or title:
+
+```bash
+python -m promptbase_exporter @acb --sort price
+python -m promptbase_exporter @acb --sort views
+python -m promptbase_exporter @acb --sort title
 ```
 
 Preview what would be exported without writing files:
@@ -177,7 +194,8 @@ Another public description appears here.
 Markdown output is designed for GitHub-readable catalogs. JSON and CSV output include these fields:
 
 ```text
-title, description, slug, url, type, domain, created, price
+title, description, slug, url, type, domain, created, created_iso, price,
+discount, views, sales, downloads, favorites, rating, reviews
 ```
 
 ## Prompt Groups
@@ -206,6 +224,18 @@ For example, this writes only paid GPT prompts into JSON:
 ```bash
 python -m promptbase_exporter @acb --mode all --format json --type gpt --paid-only
 ```
+
+Sorting is applied after filters and before writing:
+
+- `--sort newest`
+- `--sort oldest`
+- `--sort title`
+- `--sort price`
+- `--sort views`
+- `--sort sales`
+- `--sort downloads`
+- `--sort favorites`
+- `--sort rating`
 
 ## Validation
 
@@ -245,6 +275,14 @@ Run tests:
 python -m unittest discover -s tests
 ```
 
+Build the package:
+
+```bash
+python -m pip install build twine
+python -m build
+python -m twine check dist/*
+```
+
 Run the module locally:
 
 ```bash
@@ -269,6 +307,10 @@ Replace `your-username` with your GitHub username and create the empty repositor
 ## Repository Structure
 
 ```text
+.github/
+  workflows/
+    tests.yml
+    publish.yml
 promptbase_exporter/
   __main__.py
   cli.py
@@ -276,8 +318,14 @@ promptbase_exporter/
   formatting.py
   models.py
 tests/
+  test_cli.py
+  test_client.py
   test_formatting.py
   test_profile_input.py
+CHANGELOG.md
+CONTRIBUTING.md
+RELEASE.md
+SECURITY.md
 ```
 
 ## License

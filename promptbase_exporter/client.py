@@ -262,6 +262,13 @@ def fetch_prompts(profile_input: str) -> tuple[Profile, list[PromptRecord]]:
                 domain=str(item.get("domain") or "").strip(),
                 created=int(item.get("created") or 0),
                 price=float(item.get("price") or 0),
+                discount=float(item.get("discount") or 0),
+                views=int(item.get("views") or 0),
+                sales=int(item.get("sales") or 0),
+                downloads=int(item.get("downloads") or 0),
+                favorites=int(item.get("favorites") or 0),
+                rating=float(item.get("rating") or 0),
+                reviews=int(item.get("numReviews") or 0),
             )
         )
 

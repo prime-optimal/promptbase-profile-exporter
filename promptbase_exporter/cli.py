@@ -10,15 +10,21 @@ from . import __version__
 from .client import PromptBaseError, fetch_prompts
 from .formatting import (
     EXPORT_FORMATS,
+    SORT_OPTIONS,
     count_written_records,
     filter_records,
     filter_records_by_metadata,
     parse_csv_option,
+    sort_records,
     sorted_newest_to_oldest,
     write_export,
 )
 
-MODES = ("split", "all", "text", "image")
+MODE_ALIASES = {
+    "text-only": "text",
+    "image-only": "image",
+}
+MODES = ("split", "all", "text", "image", *MODE_ALIASES)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,7 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=MODES,
         default="split",
-        help="Which export to write. 'split' writes all, text, and image files.",
+        help=(
+            "Which export to write. 'split' writes all, text, and image files. "
+            "Aliases: text-only, image-only."
+        ),
     )
     parser.add_argument(
         "-o",
@@ -49,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=EXPORT_FORMATS,
         default="txt",
         help="Output file format.",
+    )
+    parser.add_argument(
+        "--sort",
+        choices=SORT_OPTIONS,
+        default="newest",
+        help="Sort selected prompts before writing.",
     )
     parser.add_argument(
         "--version",
@@ -127,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.mode = MODE_ALIASES.get(args.mode, args.mode)
 
     try:
         profile, records = fetch_prompts(args.profile)
@@ -168,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     if not selected_records:
         print("error: no prompts matched the selected filters", file=sys.stderr)
         return 1
+    selected_records = sort_records(selected_records, args.sort)
 
     missing_descriptions = [record for record in selected_records if not record.description]
     if missing_descriptions and not args.allow_missing_descriptions:
@@ -195,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Selected after filters: {len(selected_records)}")
         if args.verbose:
             print(f"Format: {args.format}")
+            print(f"Sort: {args.sort}")
             print(f"Output directory: {output_dir}")
             if args.domain:
                 print(f"Domain filter: {args.domain}")
@@ -211,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         print_counts("Domains", count_by(selected_records, "domain"))
     if args.list_types:
         print_counts("Types", count_by(selected_records, "prompt_type"))
+    if args.dry_run and not args.quiet:
+        print_planned_outputs(selected_records, modes)
 
     if args.dry_run or args.list_domains or args.list_types:
         if not args.quiet:
@@ -259,3 +279,9 @@ def print_counts(title: str, counts: dict[str, int]) -> None:
     print(f"{title}:")
     for key, value in counts.items():
         print(f"  {key}: {value}")
+
+
+def print_planned_outputs(records, modes: list[str]) -> None:
+    print("Planned outputs:")
+    for mode in modes:
+        print(f"  {mode}: {len(filter_records(records, mode))}")

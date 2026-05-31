@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.5.0
+
+- Add `--sort` with newest, oldest, title, price, views, sales, downloads, favorites, and rating options.
+- Add richer JSON/CSV metadata: `created_iso`, `discount`, `views`, `sales`, `downloads`, `favorites`, `rating`, and `reviews`.
+- Add `text-only` and `image-only` aliases for `--mode`.
+- Show planned per-mode output counts during `--dry-run`.
+- Add PyPI publish workflow scaffold.
+- Add package build checks to CI.
+- Modernize package license metadata for current setuptools builds.
+
 ## 0.4.0
 
 - Add `--version`.

@@ -9,6 +9,17 @@ from pathlib import Path
 from .models import PromptRecord
 
 EXPORT_FORMATS = ("txt", "markdown", "json", "csv")
+SORT_OPTIONS = (
+    "newest",
+    "oldest",
+    "title",
+    "price",
+    "views",
+    "sales",
+    "downloads",
+    "favorites",
+    "rating",
+)
 FORMAT_EXTENSIONS = {
     "txt": "txt",
     "markdown": "md",
@@ -61,6 +72,24 @@ def filter_records_by_metadata(
     return filtered
 
 
+def sort_records(records: list[PromptRecord], sort_by: str) -> list[PromptRecord]:
+    if sort_by == "newest":
+        return sorted(records, key=lambda record: (record.created, record.slug), reverse=True)
+    if sort_by == "oldest":
+        return sorted(records, key=lambda record: (record.created, record.slug))
+    if sort_by == "title":
+        return sorted(records, key=lambda record: record.title.casefold())
+    if sort_by == "price":
+        return sorted(records, key=lambda record: (record.price, record.created), reverse=True)
+    if sort_by in {"views", "sales", "downloads", "favorites", "rating"}:
+        return sorted(
+            records,
+            key=lambda record: (getattr(record, sort_by), record.created),
+            reverse=True,
+        )
+    raise ValueError(f"Unsupported sort option: {sort_by}")
+
+
 def format_records_as_text(records: list[PromptRecord]) -> str:
     parts: list[str] = []
     for index, record in enumerate(records, 1):
@@ -86,6 +115,9 @@ def format_records_as_markdown(records: list[PromptRecord]) -> str:
                 f"- Domain: {record.domain or 'unknown'}",
                 f"- Type: {record.prompt_type or 'unknown'}",
                 f"- Price: {record.price:g}",
+                f"- Created: {record.created_iso or 'unknown'}",
+                f"- Views: {record.views}",
+                f"- Sales: {record.sales}",
                 "",
                 description.strip(),
                 "",
@@ -103,7 +135,15 @@ def record_to_dict(record: PromptRecord) -> dict[str, object]:
         "type": record.prompt_type,
         "domain": record.domain,
         "created": record.created,
+        "created_iso": record.created_iso,
         "price": record.price,
+        "discount": record.discount,
+        "views": record.views,
+        "sales": record.sales,
+        "downloads": record.downloads,
+        "favorites": record.favorites,
+        "rating": record.rating,
+        "reviews": record.reviews,
     }
 
 
@@ -121,7 +161,15 @@ def format_records_as_csv(records: list[PromptRecord]) -> str:
         "type",
         "domain",
         "created",
+        "created_iso",
         "price",
+        "discount",
+        "views",
+        "sales",
+        "downloads",
+        "favorites",
+        "rating",
+        "reviews",
     ]
     rows = [record_to_dict(record) for record in records]
     output = io.StringIO()

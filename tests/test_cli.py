@@ -41,6 +41,10 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         write_export.assert_not_called()
+        self.assertIn("Planned outputs:", stdout.getvalue())
+        self.assertIn("all: 1", stdout.getvalue())
+        self.assertIn("text: 1", stdout.getvalue())
+        self.assertIn("image: 0", stdout.getvalue())
         self.assertIn("Dry run: no files written.", stdout.getvalue())
 
     def test_list_domains_exits_without_writing(self):
@@ -60,6 +64,46 @@ class CliTests(unittest.TestCase):
         write_export.assert_not_called()
         self.assertIn("Domains:", stdout.getvalue())
         self.assertIn("text: 1", stdout.getvalue())
+
+    def test_text_only_mode_alias_writes_text_export(self):
+        records = [
+            record("A", "text", "gpt"),
+            record("B", "image", "chatgpt-image"),
+        ]
+        with patch(
+            "promptbase_exporter.cli.fetch_prompts",
+            return_value=(Profile(username="acb", uid="uid-1"), records),
+        ), patch("promptbase_exporter.cli.write_export") as write_export, patch(
+            "promptbase_exporter.cli.count_written_records",
+            return_value=1,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(["@acb", "--mode", "text-only"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(write_export.call_args.args[2], "text")
+        self.assertEqual([record.title for record in write_export.call_args.args[3]], ["A"])
+
+    def test_image_only_mode_alias_writes_image_export(self):
+        records = [
+            record("A", "text", "gpt"),
+            record("B", "image", "chatgpt-image"),
+        ]
+        with patch(
+            "promptbase_exporter.cli.fetch_prompts",
+            return_value=(Profile(username="acb", uid="uid-1"), records),
+        ), patch("promptbase_exporter.cli.write_export") as write_export, patch(
+            "promptbase_exporter.cli.count_written_records",
+            return_value=1,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(["@acb", "--mode", "image-only"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(write_export.call_args.args[2], "image")
+        self.assertEqual([record.title for record in write_export.call_args.args[3]], ["B"])
 
     def test_version_argument_exits(self):
         stdout = io.StringIO()
