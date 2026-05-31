@@ -1,8 +1,13 @@
+import io
+import json
 import unittest
-from unittest.mock import patch
+import urllib.error
+from unittest.mock import MagicMock, patch
 
 from promptbase_exporter.client import (
+    MAX_RETRIES,
     PromptBaseError,
+    _open_json_with_retry,
     _raise_if_schema_changed,
     _run_query_all,
     fetch_prompts,
@@ -160,6 +165,120 @@ class ResolveProfileTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(PromptBaseError, "Ambiguous profile"):
                 resolve_profile("@acb")
+
+
+class RetryTests(unittest.TestCase):
+    @staticmethod
+    def _response(body: bytes) -> MagicMock:
+        cm = MagicMock()
+        cm.__enter__.return_value = io.BytesIO(body)
+        cm.__exit__.return_value = False
+        return cm
+
+    @staticmethod
+    def _http_error(code: int) -> urllib.error.HTTPError:
+        return urllib.error.HTTPError(
+            url="http://x",
+            code=code,
+            msg="boom",
+            hdrs=None,
+            fp=io.BytesIO(b""),
+        )
+
+    def test_success_on_first_attempt_returns_decoded_json(self):
+        with patch(
+            "promptbase_exporter.client.urllib.request.urlopen"
+        ) as urlopen, patch(
+            "promptbase_exporter.client.time.sleep"
+        ) as sleep:
+            urlopen.return_value = self._response(b'[{"document": 1}]')
+
+            result = _open_json_with_retry(MagicMock())
+
+        self.assertEqual(result, [{"document": 1}])
+        self.assertEqual(urlopen.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_transient_http_error_then_success(self):
+        with patch(
+            "promptbase_exporter.client.urllib.request.urlopen"
+        ) as urlopen, patch(
+            "promptbase_exporter.client.time.sleep"
+        ) as sleep:
+            urlopen.side_effect = [
+                self._http_error(503),
+                self._response(b'[{"document": 2}]'),
+            ]
+
+            result = _open_json_with_retry(MagicMock())
+
+        self.assertEqual(result, [{"document": 2}])
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(sleep.call_count, 1)
+
+    def test_non_transient_http_error_raises_immediately(self):
+        error = self._http_error(404)
+        with patch(
+            "promptbase_exporter.client.urllib.request.urlopen"
+        ) as urlopen, patch(
+            "promptbase_exporter.client.time.sleep"
+        ) as sleep:
+            urlopen.side_effect = error
+
+            with self.assertRaises(PromptBaseError) as ctx:
+                _open_json_with_retry(MagicMock())
+
+        self.assertEqual(urlopen.call_count, 1)
+        sleep.assert_not_called()
+        self.assertIs(ctx.exception.__cause__, error)
+
+    def test_persistent_transient_http_error_exhausts_retries(self):
+        with patch(
+            "promptbase_exporter.client.urllib.request.urlopen"
+        ) as urlopen, patch(
+            "promptbase_exporter.client.time.sleep"
+        ) as sleep:
+            urlopen.side_effect = [self._http_error(503) for _ in range(MAX_RETRIES)]
+
+            with self.assertRaises(PromptBaseError):
+                _open_json_with_retry(MagicMock())
+
+        self.assertEqual(urlopen.call_count, MAX_RETRIES)
+        self.assertEqual(sleep.call_count, MAX_RETRIES - 1)
+
+    def test_url_error_then_success_is_retried(self):
+        with patch(
+            "promptbase_exporter.client.urllib.request.urlopen"
+        ) as urlopen, patch(
+            "promptbase_exporter.client.time.sleep"
+        ) as sleep:
+            urlopen.side_effect = [
+                urllib.error.URLError("connection reset"),
+                self._response(b'[{"document": 3}]'),
+            ]
+
+            result = _open_json_with_retry(MagicMock())
+
+        self.assertEqual(result, [{"document": 3}])
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(sleep.call_count, 1)
+
+    def test_persistent_json_decode_error_exhausts_retries(self):
+        with patch(
+            "promptbase_exporter.client.urllib.request.urlopen"
+        ) as urlopen, patch(
+            "promptbase_exporter.client.time.sleep"
+        ) as sleep:
+            urlopen.side_effect = [
+                self._response(b"not json") for _ in range(MAX_RETRIES)
+            ]
+
+            with self.assertRaises(PromptBaseError) as ctx:
+                _open_json_with_retry(MagicMock())
+
+        self.assertEqual(urlopen.call_count, MAX_RETRIES)
+        self.assertEqual(sleep.call_count, MAX_RETRIES - 1)
+        self.assertIsInstance(ctx.exception.__cause__, json.JSONDecodeError)
 
 
 if __name__ == "__main__":

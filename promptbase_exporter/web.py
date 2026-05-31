@@ -627,7 +627,28 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
+
+
+def _warn_if_exposed(host: str) -> None:
+    """Warn when binding somewhere other than loopback.
+
+    The /export endpoint is unauthenticated, writes files, and makes outbound
+    requests. On a non-loopback bind it becomes reachable by other hosts, so
+    make the exposure explicit rather than silent.
+    """
+    if host in LOOPBACK_HOSTS:
+        return
+    print(
+        f"WARNING: binding to {host!r} exposes the unauthenticated web UI "
+        "(which writes files and fetches remote data) to other hosts. "
+        "Only do this on a trusted network.",
+        file=sys.stderr,
+    )
+
+
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+    _warn_if_exposed(host)
     with ThreadingHTTPServer((host, port), PromptBaseWebHandler) as server:
         print(f"Serving PromptBase Profile Exporter at http://{host}:{port}/")
         server.serve_forever()

@@ -1,4 +1,6 @@
+import io
 import unittest
+from contextlib import redirect_stderr
 from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -8,6 +10,7 @@ from promptbase_exporter.web import (
     ExportRequest,
     PromptBaseWebHandler,
     WebInputError,
+    _warn_if_exposed,
     build_request_config,
     render_form,
     run_export,
@@ -186,6 +189,19 @@ class WebTests(unittest.TestCase):
 
             with self.assertRaises(WebInputError):
                 run_export(request, fetcher=fetcher)
+
+
+class ExposureWarningTests(unittest.TestCase):
+    def test_no_warning_for_loopback(self):
+        for host in ("127.0.0.1", "localhost", "::1", ""):
+            with redirect_stderr(io.StringIO()) as err:
+                _warn_if_exposed(host)
+            self.assertEqual(err.getvalue(), "")
+
+    def test_warns_for_non_loopback(self):
+        with redirect_stderr(io.StringIO()) as err:
+            _warn_if_exposed("0.0.0.0")
+        self.assertIn("WARNING", err.getvalue())
 
 
 class RequestGuardTests(unittest.TestCase):
