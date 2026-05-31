@@ -42,10 +42,11 @@ jobs:
 
 The workflow runs manually from the Actions tab and every Monday at 05:00 UTC. The generated `exports/` directory is uploaded as the `promptbase-catalog` artifact.
 
-For stable production workflows, pin the action to a release tag instead of `main`:
+For stable production workflows, pin the action to a published release tag
+instead of `main`:
 
 ```yaml
-- uses: IACBI/promptbase-profile-exporter@v0.6.0
+- uses: IACBI/promptbase-profile-exporter@v0.7.0
 ```
 
 ## Commit Exports Back To The Repository

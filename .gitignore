@@ -9,5 +9,6 @@ venv/
 build/
 dist/
 exports/
+.claude/
 .DS_Store
 Thumbs.db

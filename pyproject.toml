@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptbase-profile-exporter"
-version = "0.6.0"
+version = "0.7.0"
 description = "Export public PromptBase profile prompts into TXT, Markdown, JSON, and CSV catalogs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,6 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Utilities"
 ]
 
@@ -35,6 +36,9 @@ promptbase-export-web = "promptbase_exporter.web:main"
 
 [project.optional-dependencies]
 dev = ["build", "ruff", "twine"]
+
+[tool.setuptools.package-data]
+promptbase_exporter = ["py.typed"]
 
 [tool.ruff]
 line-length = 100

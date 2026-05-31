@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Move shared date parsing into `promptbase_exporter.dates` so the web UI no
+  longer imports from the CLI module.
+- Reuse the dates the web layer already parsed for validation instead of
+  parsing `since`/`until` a second time during export.
+
+### Internal
+
+- Ship a `py.typed` marker so downstream type checkers see the package's hints.
+- Add Python 3.13 to the test matrix and package classifiers.
+
+## 0.7.0 - 2026-06-01
+
 ### Fixed
 
 - Stop the Markdown export validation check from over-counting prompts whose
