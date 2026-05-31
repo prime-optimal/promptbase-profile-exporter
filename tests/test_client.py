@@ -71,7 +71,9 @@ class PaginationTests(unittest.TestCase):
             )
             return page_two
 
-        with patch("promptbase_exporter.client._run_query", side_effect=query):
+        with patch(
+            "promptbase_exporter.client._run_query", side_effect=query
+        ), patch("promptbase_exporter.client.time.sleep") as sleep:
             docs = _run_query_all(
                 "Items",
                 [field_filter("uid", "EQUAL", {"stringValue": "uid-1"})],
@@ -80,6 +82,8 @@ class PaginationTests(unittest.TestCase):
             )
 
         self.assertEqual([doc["slug"] for doc in docs], ["a", "b", "c"])
+        # One pause between the two pages, never before the first page.
+        self.assertEqual(sleep.call_count, 1)
 
 
 class SchemaDriftTests(unittest.TestCase):

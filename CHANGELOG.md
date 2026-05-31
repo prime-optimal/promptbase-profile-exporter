@@ -4,12 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Add a `/download` link for each generated file in the web UI. The endpoint
+  only serves export files inside the server's working directory, so it cannot
+  read arbitrary paths.
+
 ### Changed
 
 - Move shared date parsing into `promptbase_exporter.dates` so the web UI no
   longer imports from the CLI module.
 - Reuse the dates the web layer already parsed for validation instead of
   parsing `since`/`until` a second time during export.
+- Pause briefly between successive pages of a paginated PromptBase query so
+  large-profile fetches stay polite and avoid rate limits; single-page fetches
+  never wait.
 
 ### Removed
 
@@ -21,6 +30,9 @@ All notable changes to this project will be documented in this file.
 
 - Ship a `py.typed` marker so downstream type checkers see the package's hints.
 - Add Python 3.13 to the test matrix and package classifiers.
+- Type-check the package with `mypy` and measure coverage in CI; add dedicated
+  tests for date parsing and the web download endpoint.
+- Add a Dependabot config that keeps the pinned GitHub Actions up to date.
 
 ## 0.7.0 - 2026-06-01
 

@@ -275,6 +275,9 @@ Then open <http://127.0.0.1:8765/>. Change the bind address or port with
 promptbase-export-web --host 127.0.0.1 --port 9000
 ```
 
+After an export, each generated file gets a **Download** link so you can save it
+straight from the browser without hunting for it on disk.
+
 ### Web UI security model
 
 The web UI is intended for **local, single-user** use:
@@ -289,6 +292,9 @@ The web UI is intended for **local, single-user** use:
 - Exports are confined to the directory the server was started in. Absolute
   paths and `..` traversal in the "Output directory" field are rejected. (The
   CLI, which you run yourself, still accepts arbitrary paths.)
+- The `/download` endpoint only serves export files (`.txt`, `.md`, `.json`,
+  `.csv`) inside that same directory, so it cannot be used to read arbitrary
+  files even though it is unauthenticated.
 
 ## GitHub Action
 
@@ -405,12 +411,14 @@ how to report issues.
 
 ## Development
 
-Run the test suite and linter:
+Install the dev tools, then run the lint, type, and test checks:
 
 ```bash
-python -m unittest discover -s tests
 python -m pip install -e ".[dev]"
 python -m ruff check .
+python -m mypy
+python -m coverage run -m unittest discover -s tests
+python -m coverage report
 ```
 
 Build the package:
@@ -444,9 +452,10 @@ repository on GitHub before pushing.
 ```text
 .github/
   ISSUE_TEMPLATE/             # bug report and feature request templates
+  dependabot.yml              # weekly GitHub Actions update checks
   pull_request_template.md
   workflows/
-    tests.yml                 # lint, unit tests, and packaging checks
+    tests.yml                 # lint, type, test, and packaging checks
 promptbase_exporter/
   __init__.py
   __main__.py                 # `python -m promptbase_exporter` entry point
@@ -461,6 +470,7 @@ promptbase_exporter/
 tests/
   test_cli.py
   test_client.py
+  test_dates.py
   test_diffing.py
   test_formatting.py
   test_profile_input.py

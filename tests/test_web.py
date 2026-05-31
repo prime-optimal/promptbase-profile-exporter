@@ -1,9 +1,11 @@
 import io
+import os
 import unittest
 from contextlib import redirect_stderr
 from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import MagicMock
 
 from promptbase_exporter.models import Profile, PromptRecord
 from promptbase_exporter.web import (
@@ -243,6 +245,76 @@ class RequestGuardTests(unittest.TestCase):
     def test_allows_non_browser_client_without_headers(self):
         handler = _make_handler({"Host": "127.0.0.1:8765"})
         self.assertIsNone(handler._reject_unsafe_request())
+
+
+class DownloadTests(unittest.TestCase):
+    def _handler(self, path, headers=None):
+        handler = _make_handler(headers or {"Host": "127.0.0.1:8765"})
+        handler.path = path
+        handler._send_text = MagicMock()
+        handler._send_download = MagicMock()
+        return handler
+
+    @staticmethod
+    def _status(mock):
+        return mock.call_args.kwargs.get("status")
+
+    def test_serves_export_file_as_attachment(self):
+        with TemporaryDirectory() as directory:
+            previous = os.getcwd()
+            os.chdir(directory)
+            try:
+                exports = Path("exports")
+                exports.mkdir()
+                (exports / "acb_all_prompts.json").write_text(
+                    '[{"title": "x"}]', encoding="utf-8"
+                )
+                handler = self._handler("/download?file=exports/acb_all_prompts.json")
+                handler._handle_download()
+            finally:
+                os.chdir(previous)
+
+        handler._send_text.assert_not_called()
+        handler._send_download.assert_called_once()
+        data, filename, content_type = handler._send_download.call_args.args
+        self.assertEqual(filename, "acb_all_prompts.json")
+        self.assertIn("application/json", content_type)
+        self.assertEqual(data, b'[{"title": "x"}]')
+
+    def test_rejects_path_traversal(self):
+        handler = self._handler("/download?file=../../etc/passwd")
+        handler._handle_download()
+        handler._send_download.assert_not_called()
+        self.assertEqual(self._status(handler._send_text), 404)
+
+    def test_rejects_unsupported_extension(self):
+        with TemporaryDirectory() as directory:
+            previous = os.getcwd()
+            os.chdir(directory)
+            try:
+                Path("secret.env").write_text("token", encoding="utf-8")
+                handler = self._handler("/download?file=secret.env")
+                handler._handle_download()
+            finally:
+                os.chdir(previous)
+
+        handler._send_download.assert_not_called()
+        self.assertEqual(self._status(handler._send_text), 403)
+
+    def test_requires_file_parameter(self):
+        handler = self._handler("/download")
+        handler._handle_download()
+        handler._send_download.assert_not_called()
+        self.assertEqual(self._status(handler._send_text), 400)
+
+    def test_rejects_unrecognized_host(self):
+        handler = self._handler(
+            "/download?file=exports/acb_all_prompts.json",
+            headers={"Host": "attacker.example:8765"},
+        )
+        handler._handle_download()
+        handler._send_download.assert_not_called()
+        self.assertEqual(self._status(handler._send_text), 403)
 
 
 if __name__ == "__main__":

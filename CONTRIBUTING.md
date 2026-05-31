@@ -20,10 +20,11 @@ python -m unittest discover -s tests
 - Run:
 
 ```bash
-python -m unittest discover -s tests
-python -m promptbase_exporter --version
 python -m pip install -e ".[dev]"
 python -m ruff check .
+python -m mypy
+python -m coverage run -m unittest discover -s tests
+python -m coverage report
 python -m build
 python -m twine check dist/*
 ```
