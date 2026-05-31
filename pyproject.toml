@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptbase-profile-exporter"
-version = "0.1.0"
-description = "Export public PromptBase profile prompts into text, image, and all-prompt catalogs."
+version = "0.2.0"
+description = "Export public PromptBase profile prompts into TXT, Markdown, JSON, and CSV catalogs."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

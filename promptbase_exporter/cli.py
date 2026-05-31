@@ -6,10 +6,11 @@ from pathlib import Path
 
 from .client import PromptBaseError, fetch_prompts
 from .formatting import (
+    EXPORT_FORMATS,
     count_written_records,
     filter_records,
     sorted_newest_to_oldest,
-    write_text_export,
+    write_export,
 )
 
 MODES = ("split", "all", "text", "image")
@@ -36,6 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default="exports",
         help="Directory where export files will be written.",
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=EXPORT_FORMATS,
+        default="txt",
+        help="Output file format.",
     )
     parser.add_argument(
         "--allow-missing-descriptions",
@@ -83,8 +91,14 @@ def main(argv: list[str] | None = None) -> int:
 
     for mode in modes:
         filtered = filter_records(records, mode)
-        output_path = write_text_export(output_dir, profile.username, mode, filtered)
-        written_count = count_written_records(output_path)
+        output_path = write_export(
+            output_dir,
+            profile.username,
+            mode,
+            filtered,
+            args.format,
+        )
+        written_count = count_written_records(output_path, args.format)
         if written_count != len(filtered):
             print(
                 f"error: validation failed for {output_path}: "

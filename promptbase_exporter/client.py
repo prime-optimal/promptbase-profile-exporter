@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -16,6 +18,11 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
+
+TRANSIENT_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+DEFAULT_PAGE_SIZE = 300
+MAX_PAGES = 100
+MAX_RETRIES = 3
 
 
 class PromptBaseError(RuntimeError):
@@ -76,6 +83,7 @@ def _run_query(
     *,
     order_by: list[dict[str, Any]] | None = None,
     limit: int = 500,
+    offset: int = 0,
     start_after: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     if not filters:
@@ -100,6 +108,8 @@ def _run_query(
         structured_query["orderBy"] = order_by
     if start_after:
         structured_query["startAt"] = {"values": start_after, "before": False}
+    if offset:
+        structured_query["offset"] = offset
 
     request = urllib.request.Request(
         FIRESTORE_RUN_QUERY,
@@ -107,11 +117,7 @@ def _run_query(
         headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
 
-    try:
-        with urllib.request.urlopen(request, timeout=90) as response:
-            rows = json.load(response)
-    except Exception as exc:  # pragma: no cover - exercised in real network runs.
-        raise PromptBaseError(f"PromptBase query failed: {exc}") from exc
+    rows = _open_json_with_retry(request)
 
     docs: list[dict[str, Any]] = []
     for row in rows:
@@ -125,6 +131,48 @@ def _run_query(
         fields["_doc_name"] = document["name"]
         docs.append(fields)
     return docs
+
+
+def _open_json_with_retry(request: urllib.request.Request) -> list[dict[str, Any]]:
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code not in TRANSIENT_HTTP_STATUS_CODES or attempt == MAX_RETRIES:
+                break
+        except (TimeoutError, urllib.error.URLError, json.JSONDecodeError) as exc:
+            last_error = exc
+            if attempt == MAX_RETRIES:
+                break
+        time.sleep(0.8 * attempt)
+    raise PromptBaseError(f"PromptBase query failed: {last_error}") from last_error
+
+
+def _run_query_all(
+    collection: str,
+    filters: list[dict[str, Any]],
+    *,
+    order_by: list[dict[str, Any]] | None = None,
+    page_size: int = DEFAULT_PAGE_SIZE,
+) -> list[dict[str, Any]]:
+    docs: list[dict[str, Any]] = []
+    for page in range(MAX_PAGES):
+        page_docs = _run_query(
+            collection,
+            filters,
+            order_by=order_by,
+            limit=page_size,
+            offset=page * page_size,
+        )
+        docs.extend(page_docs)
+        if len(page_docs) < page_size:
+            return docs
+    raise PromptBaseError(
+        f"Query exceeded the pagination safety limit of {MAX_PAGES * page_size} records."
+    )
 
 
 def _order_by(field_path: str, direction: str) -> dict[str, Any]:
@@ -152,7 +200,7 @@ def resolve_profile(profile_input: str) -> Profile:
 
 
 def fetch_prompt_items(profile: Profile) -> list[dict[str, Any]]:
-    docs = _run_query(
+    docs = _run_query_all(
         "Items",
         [
             field_filter("status", "EQUAL", {"stringValue": "approved"}),
@@ -163,7 +211,6 @@ def fetch_prompt_items(profile: Profile) -> list[dict[str, Any]]:
             _order_by("created", "DESCENDING"),
             _order_by("__name__", "DESCENDING"),
         ],
-        limit=1000,
     )
 
     seen_slugs: set[str] = set()
@@ -179,11 +226,10 @@ def fetch_prompt_items(profile: Profile) -> list[dict[str, Any]]:
 
 
 def fetch_prompt_details(profile: Profile) -> dict[str, dict[str, Any]]:
-    docs = _run_query(
+    docs = _run_query_all(
         "PromptDetails",
         [field_filter("uid", "EQUAL", {"stringValue": profile.uid})],
         order_by=[_order_by("__name__", "ASCENDING")],
-        limit=1000,
     )
 
     by_slug: dict[str, dict[str, Any]] = {}

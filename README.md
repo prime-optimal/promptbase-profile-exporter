@@ -1,8 +1,8 @@
 # PromptBase Profile Exporter
 
-Export public PromptBase profile prompts into clean, readable text files.
+Export public PromptBase profile prompts into clean, readable catalog files.
 
-This small command-line tool takes a PromptBase profile URL, finds the public prompts on that profile, pulls each prompt title and description, and writes curated `.txt` exports:
+This small command-line tool takes a PromptBase profile URL, finds the public prompts on that profile, pulls each prompt title and description, and writes curated exports:
 
 - all approved prompts
 - text prompts only
@@ -17,6 +17,9 @@ It is designed for prompt creators who want to back up, audit, share, or publish
 - Exports title and description for every approved prompt.
 - Splits output into `all`, `text`, and `image` views.
 - Sorts every export from newest prompt to oldest prompt.
+- Writes `txt`, `markdown`, `json`, or `csv` output.
+- Paginates large profiles instead of stopping at the first page.
+- Retries transient PromptBase/network failures with backoff.
 - Performs basic validation before writing files.
 - Uses only the Python standard library.
 
@@ -81,15 +84,33 @@ Export all prompts into a custom folder:
 python -m promptbase_exporter @acb --mode all --output-dir my_exports
 ```
 
+Export Markdown files:
+
+```bash
+python -m promptbase_exporter @acb --format markdown
+```
+
+Export JSON for another tool:
+
+```bash
+python -m promptbase_exporter @acb --mode all --format json
+```
+
+Export CSV for spreadsheets:
+
+```bash
+python -m promptbase_exporter @acb --mode text --format csv
+```
+
 Show help:
 
 ```bash
 python -m promptbase_exporter --help
 ```
 
-## Output Format
+## Output Formats
 
-Each `.txt` file uses a simple numbered format:
+The default `.txt` file uses a simple numbered format:
 
 ```text
 1.
@@ -101,6 +122,12 @@ The public PromptBase description appears here.
 Title: Another Prompt
 Description:
 Another public description appears here.
+```
+
+Markdown output is designed for GitHub-readable catalogs. JSON and CSV output include these fields:
+
+```text
+title, description, slug, url, type, domain, created
 ```
 
 ## Prompt Groups
@@ -134,7 +161,7 @@ PromptBase is a dynamic site backed by public Firebase/Firestore data. This tool
 3. Fetch approved prompt items for that user id.
 4. Fetch matching prompt detail documents.
 5. Merge title, slug, type, domain, creation time, and description.
-6. Write clean text exports.
+6. Write clean exports in the requested format.
 
 No login, API key, browser automation, or paid account is required.
 

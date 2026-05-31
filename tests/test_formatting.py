@@ -1,9 +1,16 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from promptbase_exporter.formatting import (
+    count_written_records,
     filter_records,
+    format_records_as_csv,
+    format_records_as_json,
+    format_records_as_markdown,
     format_records_as_text,
     sorted_newest_to_oldest,
+    write_export,
 )
 from promptbase_exporter.models import PromptRecord
 
@@ -35,6 +42,33 @@ class FormattingTests(unittest.TestCase):
         text = format_records_as_text([record("Text One", "text", 1)])
 
         self.assertIn("1.\nTitle: Text One\nDescription:\nText One description", text)
+
+    def test_format_records_as_markdown(self):
+        text = format_records_as_markdown([record("Text One", "text", 1)])
+
+        self.assertIn("# PromptBase Prompt Export", text)
+        self.assertIn("## 1. Text One", text)
+        self.assertIn("- Domain: text", text)
+
+    def test_format_records_as_json(self):
+        text = format_records_as_json([record("Text One", "text", 1)])
+
+        self.assertIn('"title": "Text One"', text)
+        self.assertIn('"domain": "text"', text)
+
+    def test_format_records_as_csv(self):
+        text = format_records_as_csv([record("Text One", "text", 1)])
+
+        self.assertTrue(text.startswith("title,description,slug,url,type,domain,created\n"))
+        self.assertIn("Text One", text)
+
+    def test_write_export_counts_records_by_format(self):
+        records = [record("Text One", "text", 2), record("Image One", "image", 1)]
+        with TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            for export_format in ("txt", "markdown", "json", "csv"):
+                output_path = write_export(output_dir, "acb", "all", records, export_format)
+                self.assertEqual(count_written_records(output_path, export_format), 2)
 
     def test_sorted_newest_to_oldest(self):
         self.assertTrue(sorted_newest_to_oldest([record("A", "text", 2), record("B", "text", 1)]))
