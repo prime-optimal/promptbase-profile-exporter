@@ -292,9 +292,11 @@ The web UI is intended for **local, single-user** use:
 - Exports are confined to the directory the server was started in. Absolute
   paths and `..` traversal in the "Output directory" field are rejected. (The
   CLI, which you run yourself, still accepts arbitrary paths.)
-- The `/download` endpoint only serves export files (`.txt`, `.md`, `.json`,
-  `.csv`) inside that same directory, so it cannot be used to read arbitrary
-  files even though it is unauthenticated.
+- The `/download` endpoint only serves files inside that same directory whose
+  names match the exporter's own pattern
+  (`<username>_<mode>_prompts[...].{txt,md,json,csv}`). It cannot read arbitrary
+  files — not even an unrelated `secrets.json` in the working directory — even
+  though it is unauthenticated.
 
 ## GitHub Action
 

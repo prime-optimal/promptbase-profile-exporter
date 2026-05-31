@@ -287,19 +287,42 @@ class DownloadTests(unittest.TestCase):
         handler._send_download.assert_not_called()
         self.assertEqual(self._status(handler._send_text), 404)
 
-    def test_rejects_unsupported_extension(self):
+    def test_rejects_non_export_files(self):
+        # A supported-extension file that the tool did not generate (e.g. a
+        # stray secrets.json) and an unsupported file must both be refused, so
+        # the endpoint only ever serves real exports.
+        for name, contents in (
+            ("secrets.json", '{"token": "abc"}'),
+            ("secret.env", "token"),
+            ("notes.txt", "private"),
+        ):
+            with TemporaryDirectory() as directory:
+                previous = os.getcwd()
+                os.chdir(directory)
+                try:
+                    Path(name).write_text(contents, encoding="utf-8")
+                    handler = self._handler(f"/download?file={name}")
+                    handler._handle_download()
+                finally:
+                    os.chdir(previous)
+
+            handler._send_download.assert_not_called()
+            self.assertEqual(self._status(handler._send_text), 404)
+
+    def test_serves_timestamped_export_file(self):
         with TemporaryDirectory() as directory:
             previous = os.getcwd()
             os.chdir(directory)
             try:
-                Path("secret.env").write_text("token", encoding="utf-8")
-                handler = self._handler("/download?file=secret.env")
+                name = "acb_text_prompts_20260101_120000.csv"
+                Path(name).write_text("title\nx\n", encoding="utf-8")
+                handler = self._handler(f"/download?file={name}")
                 handler._handle_download()
             finally:
                 os.chdir(previous)
 
-        handler._send_download.assert_not_called()
-        self.assertEqual(self._status(handler._send_text), 403)
+        handler._send_text.assert_not_called()
+        handler._send_download.assert_called_once()
 
     def test_requires_file_parameter(self):
         handler = self._handler("/download")
