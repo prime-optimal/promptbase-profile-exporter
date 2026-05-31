@@ -161,17 +161,21 @@ def _run_query_all(
     page_size: int = DEFAULT_PAGE_SIZE,
 ) -> list[dict[str, Any]]:
     docs: list[dict[str, Any]] = []
+    start_after: list[dict[str, Any]] | None = None
     for page in range(MAX_PAGES):
         page_docs = _run_query(
             collection,
             filters,
             order_by=order_by,
             limit=page_size,
-            offset=page * page_size,
+            offset=0 if order_by else page * page_size,
+            start_after=start_after,
         )
         docs.extend(page_docs)
         if len(page_docs) < page_size:
             return docs
+        if order_by:
+            start_after = _cursor_values_for_doc(page_docs[-1], order_by)
     raise PromptBaseError(
         f"Query exceeded the pagination safety limit of {MAX_PAGES * page_size} records."
     )
@@ -179,6 +183,39 @@ def _run_query_all(
 
 def _order_by(field_path: str, direction: str) -> dict[str, Any]:
     return {"field": {"fieldPath": field_path}, "direction": direction}
+
+
+def _cursor_values_for_doc(
+    doc: dict[str, Any],
+    order_by: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    values: list[dict[str, Any]] = []
+    for item in order_by:
+        field_path = item.get("field", {}).get("fieldPath")
+        if field_path == "__name__":
+            doc_name = str(doc.get("_doc_name") or "")
+            if not doc_name:
+                raise PromptBaseError("Cannot paginate ordered query: document name is missing.")
+            values.append({"referenceValue": doc_name})
+            continue
+        if field_path not in doc:
+            raise PromptBaseError(
+                f"Cannot paginate ordered query: field '{field_path}' is missing."
+            )
+        values.append(_firestore_cursor_value(doc[field_path]))
+    return values
+
+
+def _firestore_cursor_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, bool):
+        return {"booleanValue": value}
+    if isinstance(value, int):
+        return {"integerValue": str(value)}
+    if isinstance(value, float):
+        return {"doubleValue": value}
+    if value is None:
+        return {"nullValue": None}
+    return {"stringValue": str(value)}
 
 
 def resolve_profile(profile_input: str) -> Profile:

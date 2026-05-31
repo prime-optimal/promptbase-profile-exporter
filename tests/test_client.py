@@ -31,6 +31,60 @@ class PaginationTests(unittest.TestCase):
         self.assertEqual(query.call_args_list[0].kwargs["offset"], 0)
         self.assertEqual(query.call_args_list[1].kwargs["offset"], 2)
 
+    def test_run_query_all_uses_cursor_for_ordered_pages(self):
+        page_one = [
+            {
+                "slug": "a",
+                "created": 3,
+                "_doc_name": "projects/p/databases/(default)/documents/Items/a",
+            },
+            {
+                "slug": "b",
+                "created": 2,
+                "_doc_name": "projects/p/databases/(default)/documents/Items/b",
+            },
+        ]
+        page_two = [
+            {
+                "slug": "c",
+                "created": 1,
+                "_doc_name": "projects/p/databases/(default)/documents/Items/c",
+            }
+        ]
+        order_by = [
+            {"field": {"fieldPath": "created"}, "direction": "DESCENDING"},
+            {"field": {"fieldPath": "__name__"}, "direction": "DESCENDING"},
+        ]
+        calls = []
+
+        def query(*_args, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                self.assertIsNone(kwargs["start_after"])
+                return page_one
+            self.assertEqual(
+                kwargs["start_after"],
+                [
+                    {"integerValue": "2"},
+                    {
+                        "referenceValue": (
+                            "projects/p/databases/(default)/documents/Items/b"
+                        )
+                    },
+                ],
+            )
+            return page_two
+
+        with patch("promptbase_exporter.client._run_query", side_effect=query):
+            docs = _run_query_all(
+                "Items",
+                [field_filter("uid", "EQUAL", {"stringValue": "uid-1"})],
+                order_by=order_by,
+                page_size=2,
+            )
+
+        self.assertEqual([doc["slug"] for doc in docs], ["a", "b", "c"])
+
 
 class SchemaDriftTests(unittest.TestCase):
     def test_raise_if_schema_changed_reports_missing_fields(self):
