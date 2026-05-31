@@ -603,20 +603,26 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
         return urllib.parse.parse_qs(body, keep_blank_values=True)
 
     def _send_html(self, body: str, *, status: int = 200) -> None:
-        data = body.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(data)
+        self._send(body, "text/html; charset=utf-8", status=status)
 
     def _send_text(self, body: str, *, status: int = 200) -> None:
+        self._send(body, "text/plain; charset=utf-8", status=status)
+
+    def _send(self, body: str, content_type: str, *, status: int) -> None:
         data = body.encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        # The UI uses only inline CSS and a same-origin form; deny everything
+        # else so a future markup mistake cannot load active content.
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; "
+            "form-action 'self'; base-uri 'none'",
+        )
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(data)
 
