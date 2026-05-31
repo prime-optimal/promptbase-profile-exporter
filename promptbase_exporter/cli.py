@@ -313,6 +313,12 @@ def main(argv: list[str] | None = None) -> int:
         except FileExistsError as exc:
             print(f"error: {exc}. Use --overwrite to replace it.", file=sys.stderr)
             return 1
+        except OSError as exc:
+            print(
+                f"error: could not write {options['output_file']}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
         written_count = count_written_records(output_path, options["export_format"])
         if written_count != len(filtered):
             print(
@@ -328,14 +334,18 @@ def main(argv: list[str] | None = None) -> int:
 
     for mode in modes:
         filtered = filter_records(selected_records, mode)
-        output_path = write_export(
-            output_dir,
-            profile.username,
-            mode,
-            filtered,
-            options["export_format"],
-            timestamp=timestamp,
-        )
+        try:
+            output_path = write_export(
+                output_dir,
+                profile.username,
+                mode,
+                filtered,
+                options["export_format"],
+                timestamp=timestamp,
+            )
+        except OSError as exc:
+            print(f"error: could not write export to {output_dir}: {exc}", file=sys.stderr)
+            return 1
         written_count = count_written_records(output_path, options["export_format"])
         if written_count != len(filtered):
             print(
@@ -461,7 +471,14 @@ def handle_compare(
     if not quiet:
         print(report.rstrip())
     if diff_output:
-        write_diff_report(diff_output, diff)
+        try:
+            write_diff_report(diff_output, diff)
+        except OSError as exc:
+            print(
+                f"error: could not write diff report to {diff_output}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
         if not quiet:
             print(f"Wrote diff report -> {diff_output}")
     if fail_on_diff and diff.has_changes:

@@ -273,7 +273,11 @@ def count_written_records(path: Path, export_format: str) -> int:
             )
         )
     if export_format == "markdown":
-        return len(re.findall(r"^## \d+\. ", text, flags=re.MULTILINE))
+        # Only count headings that begin a real record (heading followed by a
+        # blank line and the metadata block). A bare "## N." line inside a
+        # description must not inflate the count, mirroring how the diff parser
+        # in diffing._parse_markdown_catalog splits records.
+        return len(re.findall(r"^## \d+\. .*\n\n- URL: ", text, flags=re.MULTILINE))
     if export_format == "json":
         return len(json.loads(text))
     if export_format == "csv":

@@ -165,6 +165,33 @@ class FormattingTests(unittest.TestCase):
 
             self.assertEqual(count_written_records(output_path, "txt"), 1)
 
+    def test_markdown_count_ignores_heading_lines_inside_description(self):
+        adversarial = PromptRecord(
+            title="Guide",
+            description="Steps:\n\n## 1. First step\n## 2. Second step",
+            slug="guide",
+            prompt_type="gpt",
+            domain="text",
+            created=1,
+            price=0,
+        )
+        with TemporaryDirectory() as directory:
+            output_path = write_export(Path(directory), "acb", "all", [adversarial], "markdown")
+
+            # The ## headings inside the description must not inflate the count.
+            self.assertEqual(count_written_records(output_path, "markdown"), 1)
+
+    def test_markdown_count_matches_multiple_records(self):
+        records = [
+            record("Alpha", "text", 3),
+            record("Beta", "image", 2),
+            record("Gamma", "text", 1),
+        ]
+        with TemporaryDirectory() as directory:
+            output_path = write_export(Path(directory), "acb", "all", records, "markdown")
+
+            self.assertEqual(count_written_records(output_path, "markdown"), 3)
+
     def test_write_export_to_path_refuses_existing_without_overwrite(self):
         with TemporaryDirectory() as directory:
             output_path = Path(directory) / "catalog.json"
