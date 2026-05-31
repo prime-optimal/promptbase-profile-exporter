@@ -98,6 +98,28 @@ class SchemaDriftTests(unittest.TestCase):
     def test_raise_if_schema_changed_allows_empty_results(self):
         _raise_if_schema_changed("Items", [], {"slug", "title"})
 
+    def test_raise_if_schema_changed_reports_majority_missing_required_field(self):
+        docs = [{"slug": "one", "title": "One"}] + [
+            {"slug": f"missing-{index}"} for index in range(9)
+        ]
+
+        with self.assertRaisesRegex(PromptBaseError, "missing expected field"):
+            _raise_if_schema_changed("Items", docs, {"slug", "title"})
+
+    def test_raise_if_schema_changed_tolerates_isolated_missing_required_field(self):
+        docs = [{"slug": "missing-title"}] + [
+            {"slug": f"ok-{index}", "title": "Title"} for index in range(9)
+        ]
+
+        _raise_if_schema_changed("Items", docs, {"slug", "title"})
+
+    def test_raise_if_schema_changed_ignores_optional_fields(self):
+        _raise_if_schema_changed(
+            "Items",
+            [{"slug": "one"}, {"slug": "two"}],
+            {"slug"},
+        )
+
 
 class FetchPromptTests(unittest.TestCase):
     def test_fetch_prompts_normalizes_domain_case(self):

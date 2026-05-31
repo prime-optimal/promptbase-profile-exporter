@@ -23,6 +23,7 @@ TRANSIENT_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 DEFAULT_PAGE_SIZE = 300
 MAX_PAGES = 100
 MAX_RETRIES = 3
+SCHEMA_DRIFT_MISSING_RATIO = 0.8
 PROMPT_ITEM_SCHEMA_FIELDS = {"slug", "title", "created", "domain", "type"}
 PROMPT_DETAIL_SCHEMA_FIELDS = {"slug", "description"}
 
@@ -324,16 +325,17 @@ def _raise_if_schema_changed(
 ) -> None:
     if not docs:
         return
-    missing_everywhere = sorted(
-        field
-        for field in expected_fields
-        if all(field not in doc for doc in docs)
-    )
-    if missing_everywhere:
-        missing = ", ".join(missing_everywhere)
+    doc_count = len(docs)
+    severely_missing = []
+    for field in sorted(expected_fields):
+        missing_count = sum(1 for doc in docs if field not in doc)
+        if missing_count == doc_count or missing_count / doc_count >= SCHEMA_DRIFT_MISSING_RATIO:
+            severely_missing.append(f"{field} ({missing_count}/{doc_count})")
+    if severely_missing:
+        missing = ", ".join(severely_missing)
         raise PromptBaseError(
             f"PromptBase public data schema changed for {collection}: "
-            f"missing expected field(s) in every returned document: {missing}"
+            f"missing expected field(s) in most returned documents: {missing}"
         )
 
 
