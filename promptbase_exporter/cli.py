@@ -29,6 +29,14 @@ MODE_ALIASES = {
 }
 MODES = ("split", "all", "text", "image", *MODE_ALIASES)
 
+# Process exit codes. These must stay distinguishable: EXIT_ERROR signals an
+# operational failure (bad catalog load, unwritable output) that must never
+# fall through to overwriting the existing catalog, whereas EXIT_DIFF is the
+# intentional --fail-on-diff signal that the --update-file path tolerates.
+EXIT_SUCCESS = 0
+EXIT_ERROR = 1
+EXIT_DIFF = 2
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -287,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Dry run: no files written.")
         return 0
 
-    diff_exit_code = 0
+    diff_exit_code = EXIT_SUCCESS
     if options["compare_path"]:
         diff_exit_code = handle_compare(
             selected_records,
@@ -297,7 +305,15 @@ def main(argv: list[str] | None = None) -> int:
             args.fail_on_diff,
             quiet=args.quiet,
         )
+        if diff_exit_code == EXIT_ERROR:
+            # An operational failure (catalog load failed, or the requested diff
+            # report could not be written) must abort before any export so we
+            # never overwrite the existing --update-file catalog.
+            return diff_exit_code
         if diff_exit_code and not args.update_file:
+            # --fail-on-diff signalled differences. Without --update-file this is
+            # terminal; with --update-file the rewrite still proceeds and the
+            # EXIT_DIFF code is returned after writing.
             return diff_exit_code
 
     if options["output_file"]:
@@ -464,7 +480,7 @@ def handle_compare(
         previous_records = load_catalog(compare_path)
     except (OSError, ValueError) as exc:
         print(f"error: could not load comparison catalog: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
     filtered = filter_records(selected_records, modes[0])
     diff = compare_catalogs(previous_records, filtered)
     report = format_diff_report(diff)
@@ -478,12 +494,12 @@ def handle_compare(
                 f"error: could not write diff report to {diff_output}: {exc}",
                 file=sys.stderr,
             )
-            return 1
+            return EXIT_ERROR
         if not quiet:
             print(f"Wrote diff report -> {diff_output}")
     if fail_on_diff and diff.has_changes:
-        return 2
-    return 0
+        return EXIT_DIFF
+    return EXIT_SUCCESS
 
 
 def count_by(records, attribute: str) -> dict[str, int]:

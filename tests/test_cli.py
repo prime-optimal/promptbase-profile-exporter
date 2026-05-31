@@ -5,7 +5,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from promptbase_exporter.cli import count_by, main, parse_datetime_ms
+from promptbase_exporter.cli import (
+    EXIT_DIFF,
+    EXIT_ERROR,
+    count_by,
+    main,
+    parse_datetime_ms,
+)
 from promptbase_exporter.models import Profile, PromptRecord
 
 
@@ -395,6 +401,77 @@ class ParseDatetimeTests(unittest.TestCase):
             parse_datetime_ms("2026-01-01T00:00:00+01:00", end_of_day=False),
             parse_datetime_ms("2025-12-31T23:00:00+00:00", end_of_day=False),
         )
+
+
+class UpdateFileDiffFailureTests(unittest.TestCase):
+    """--update-file must not overwrite the catalog when the diff artifact fails,
+    while --fail-on-diff stays a distinct, non-fatal exit for the update path."""
+
+    ORIGINAL = "1.\nTitle: Old\nDescription:\nOld description\n"
+
+    def _fetch(self):
+        return patch(
+            "promptbase_exporter.cli.fetch_prompts",
+            return_value=(Profile(username="acb", uid="uid-1"), [record("New", "text", "gpt")]),
+        )
+
+    def test_diff_write_failure_does_not_overwrite_update_file(self):
+        with TemporaryDirectory() as directory:
+            catalog = Path(directory) / "catalog.txt"
+            catalog.write_text(self.ORIGINAL, encoding="utf-8")
+            diff_path = Path(directory) / "reports" / "diff.md"
+            with self._fetch(), patch(
+                "promptbase_exporter.cli.write_diff_report",
+                side_effect=OSError("permission denied"),
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = main(
+                        [
+                            "@acb",
+                            "--mode",
+                            "all",
+                            "--update-file",
+                            str(catalog),
+                            "--diff-output",
+                            str(diff_path),
+                        ]
+                    )
+
+            # The diff artifact failed, so this is an operational error, not a
+            # success and not the --fail-on-diff signal.
+            self.assertEqual(exit_code, EXIT_ERROR)
+            self.assertNotEqual(exit_code, EXIT_DIFF)
+            self.assertIn("could not write diff report", stderr.getvalue())
+            # Critically, the existing catalog must be left untouched.
+            self.assertEqual(catalog.read_text(encoding="utf-8"), self.ORIGINAL)
+
+    def test_fail_on_diff_stays_distinct_and_rewrites_update_file(self):
+        with TemporaryDirectory() as directory:
+            catalog = Path(directory) / "catalog.txt"
+            catalog.write_text(self.ORIGINAL, encoding="utf-8")
+            with self._fetch():
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = main(
+                        [
+                            "@acb",
+                            "--mode",
+                            "all",
+                            "--update-file",
+                            str(catalog),
+                            "--fail-on-diff",
+                        ]
+                    )
+
+            # --fail-on-diff is its own exit code, distinct from an error, and it
+            # leaves the update-file rewrite behavior unchanged.
+            self.assertEqual(exit_code, EXIT_DIFF)
+            self.assertNotEqual(exit_code, EXIT_ERROR)
+            self.assertNotIn("could not write", stderr.getvalue())
+            self.assertIn("Title: New", catalog.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
