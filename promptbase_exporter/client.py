@@ -263,7 +263,7 @@ def fetch_prompts(profile_input: str) -> tuple[Profile, list[PromptRecord]]:
                 description=str(details.get("description") or "").strip(),
                 slug=slug,
                 prompt_type=str(item.get("type") or "").strip(),
-                domain=str(item.get("domain") or "").strip(),
+                domain=str(item.get("domain") or "").strip().lower(),
                 created=_int_field(item, "created"),
                 price=_float_field(item, "price"),
                 discount=_float_field(item, "discount"),

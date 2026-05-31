@@ -5,8 +5,10 @@ from promptbase_exporter.client import (
     PromptBaseError,
     _raise_if_schema_changed,
     _run_query_all,
+    fetch_prompts,
     field_filter,
 )
+from promptbase_exporter.models import Profile
 
 
 class PaginationTests(unittest.TestCase):
@@ -41,6 +43,43 @@ class SchemaDriftTests(unittest.TestCase):
 
     def test_raise_if_schema_changed_allows_empty_results(self):
         _raise_if_schema_changed("Items", [], {"slug", "title"})
+
+
+class FetchPromptTests(unittest.TestCase):
+    def test_fetch_prompts_normalizes_domain_case(self):
+        with patch(
+            "promptbase_exporter.client.resolve_profile",
+            return_value=Profile(username="acb", uid="uid-1"),
+        ), patch(
+            "promptbase_exporter.client.fetch_prompt_items",
+            return_value=[
+                {
+                    "slug": "text-one",
+                    "title": "Text One",
+                    "type": "gpt",
+                    "domain": "Text",
+                    "created": 1,
+                },
+                {
+                    "slug": "image-one",
+                    "title": "Image One",
+                    "type": "chatgpt-image",
+                    "domain": "IMAGE",
+                    "created": 1,
+                },
+            ],
+        ), patch(
+            "promptbase_exporter.client.fetch_prompt_details",
+            return_value={
+                "text-one": {"description": "Text description"},
+                "image-one": {"description": "Image description"},
+            },
+        ):
+            _profile, records = fetch_prompts("@acb")
+
+        self.assertEqual([record.domain for record in records], ["text", "image"])
+        self.assertEqual(sum(record.is_text for record in records), 1)
+        self.assertEqual(sum(record.is_image for record in records), 1)
 
 
 if __name__ == "__main__":
