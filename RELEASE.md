@@ -6,8 +6,8 @@ Use this checklist when publishing a new version.
 
 - `promptbase_exporter/__init__.py`
 - `pyproject.toml`
-- `CHANGELOG.md`
-- `docs/github-action.md` release tag examples, when needed
+- `CHANGELOG.md` (promote the `Unreleased` section to the new version)
+- `@vX.Y.Z` pin examples in `README.md` and `docs/github-action.md`
 
 ## 2. Run Local Validation
 
@@ -45,15 +45,15 @@ git push origin vX.Y.Z
 
 Then create a GitHub Release from the tag and copy the relevant `CHANGELOG.md` section into the release notes.
 
-## 6. PyPI Publishing
+The tag is what users pin the GitHub Action to (`@vX.Y.Z`), so publishing the release completes the process.
 
-The `publish` GitHub Actions workflow is configured for PyPI trusted publishing.
+## Optional: PyPI Publishing
 
-Before the first release:
+This project is not published to PyPI; users install it by cloning the
+repository or by pinning the GitHub Action to a release tag, neither of which
+needs PyPI.
 
-1. Create or claim the PyPI project name.
-2. Configure PyPI trusted publishing for this GitHub repository.
-3. Set the GitHub environment name to `pypi`.
-4. Publish a GitHub Release.
-
-No PyPI API token is required when trusted publishing is configured correctly.
+To add PyPI distribution later, configure [trusted publishing](https://docs.pypi.org/trusted-publishers/)
+for the repository, add a `pypi` GitHub environment, and restore a publish
+workflow that runs `python -m build` and `pypa/gh-action-pypi-publish` on
+`release: published`.
