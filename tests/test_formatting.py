@@ -150,6 +150,21 @@ class FormattingTests(unittest.TestCase):
                 output_path = write_export(output_dir, "acb", "all", records, export_format)
                 self.assertEqual(count_written_records(output_path, export_format), 2)
 
+    def test_txt_count_ignores_numbered_lines_inside_description(self):
+        adversarial = PromptRecord(
+            title="Text One",
+            description="A description with a numbered-looking line.\n5.\nStill same prompt.",
+            slug="text-one",
+            prompt_type="gpt",
+            domain="text",
+            created=1,
+            price=0,
+        )
+        with TemporaryDirectory() as directory:
+            output_path = write_export(Path(directory), "acb", "all", [adversarial], "txt")
+
+            self.assertEqual(count_written_records(output_path, "txt"), 1)
+
     def test_write_export_to_path_refuses_existing_without_overwrite(self):
         with TemporaryDirectory() as directory:
             output_path = Path(directory) / "catalog.json"

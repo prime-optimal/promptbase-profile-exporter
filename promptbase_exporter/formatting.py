@@ -266,7 +266,12 @@ def infer_format_from_path(path: Path) -> str:
 def count_written_records(path: Path, export_format: str) -> int:
     text = path.read_text(encoding="utf-8")
     if export_format == "txt":
-        return len(re.findall(r"^\d+\.$", text, flags=re.MULTILINE))
+        return len(
+            re.findall(
+                r"(?m)^\d+\.\nTitle: .+\nDescription:\n",
+                text,
+            )
+        )
     if export_format == "markdown":
         return len(re.findall(r"^## \d+\. ", text, flags=re.MULTILINE))
     if export_format == "json":
