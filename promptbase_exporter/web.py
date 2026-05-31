@@ -113,8 +113,8 @@ def build_request_config(
     limit = _parse_optional_int(form_data, "limit")
     since = _single_value(form_data, "since").strip()
     until = _single_value(form_data, "until").strip()
-    since_created = parse_datetime_ms(since, end_of_day=False) if since else None
-    until_created = parse_datetime_ms(until, end_of_day=True) if until else None
+    since_created = _parse_optional_date(since, "since", end_of_day=False)
+    until_created = _parse_optional_date(until, "until", end_of_day=True)
     if (
         since_created is not None
         and until_created is not None
@@ -648,6 +648,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nServer stopped.", file=sys.stderr)
     return 0
+
+
+def _parse_optional_date(value: str, name: str, *, end_of_day: bool) -> int | None:
+    """Parse an optional ISO date, surfacing bad input as a 400, not a 500."""
+    if not value:
+        return None
+    try:
+        return parse_datetime_ms(value, end_of_day=end_of_day)
+    except ValueError as exc:
+        raise WebInputError(f"{name.title()} date is invalid: {exc}") from exc
 
 
 def _resolve_output_dir(raw: str) -> Path:

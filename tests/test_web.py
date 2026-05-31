@@ -101,6 +101,11 @@ class WebTests(unittest.TestCase):
                 }
             )
 
+    def test_build_request_config_rejects_invalid_dates(self):
+        for field in ("since", "until"):
+            with self.assertRaises(WebInputError):
+                build_request_config({"profile": "acb", field: "not-a-date"})
+
     def test_render_form_contains_expected_controls(self):
         html = render_form(ExportRequest(profile_input="@acb"))
 
