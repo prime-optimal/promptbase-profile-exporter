@@ -1,15 +1,32 @@
 import unittest
+from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from promptbase_exporter.models import Profile, PromptRecord
 from promptbase_exporter.web import (
     ExportRequest,
+    PromptBaseWebHandler,
     WebInputError,
     build_request_config,
     render_form,
     run_export,
 )
+
+
+class _FakeServer:
+    def __init__(self, address):
+        self.server_address = address
+
+
+def _make_handler(headers, address=("127.0.0.1", 8765)):
+    handler = PromptBaseWebHandler.__new__(PromptBaseWebHandler)
+    message = Message()
+    for key, value in headers.items():
+        message[key] = value
+    handler.headers = message
+    handler.server = _FakeServer(address)
+    return handler
 
 
 def record(title, domain, prompt_type, created=1, price=0.0, description=None):
@@ -164,6 +181,44 @@ class WebTests(unittest.TestCase):
 
             with self.assertRaises(WebInputError):
                 run_export(request, fetcher=fetcher)
+
+
+class RequestGuardTests(unittest.TestCase):
+    def test_allows_same_origin_sec_fetch_site(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Sec-Fetch-Site": "same-origin"}
+        )
+        self.assertIsNone(handler._reject_unsafe_request())
+
+    def test_allows_none_sec_fetch_site(self):
+        handler = _make_handler({"Host": "localhost:8765", "Sec-Fetch-Site": "none"})
+        self.assertIsNone(handler._reject_unsafe_request())
+
+    def test_rejects_cross_site_sec_fetch_site(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Sec-Fetch-Site": "cross-site"}
+        )
+        self.assertIsNotNone(handler._reject_unsafe_request())
+
+    def test_rejects_foreign_origin(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Origin": "http://evil.example"}
+        )
+        self.assertIsNotNone(handler._reject_unsafe_request())
+
+    def test_allows_matching_origin(self):
+        handler = _make_handler(
+            {"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"}
+        )
+        self.assertIsNone(handler._reject_unsafe_request())
+
+    def test_rejects_rebound_host_header(self):
+        handler = _make_handler({"Host": "attacker.example:8765"})
+        self.assertIsNotNone(handler._reject_unsafe_request())
+
+    def test_allows_non_browser_client_without_headers(self):
+        handler = _make_handler({"Host": "127.0.0.1:8765"})
+        self.assertIsNone(handler._reject_unsafe_request())
 
 
 if __name__ == "__main__":
