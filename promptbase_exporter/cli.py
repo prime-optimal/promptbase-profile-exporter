@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
-from datetime import date, datetime, time, timezone
+from datetime import datetime
 from pathlib import Path
 
 from . import __version__
 from .client import PromptBaseError, fetch_prompts
+from .dates import parse_datetime_ms
 from .diffing import compare_catalogs, format_diff_report, load_catalog, write_diff_report
 from .formatting import (
     EXPORT_FORMATS,
@@ -436,35 +437,6 @@ def normalize_options(args: argparse.Namespace) -> dict:
         "since_created": since_created,
         "until_created": until_created,
     }
-
-
-def parse_datetime_ms(value: str, *, end_of_day: bool) -> int:
-    raw = value.strip()
-    if not raw:
-        raise ValueError("date value cannot be empty")
-    try:
-        if re_full_date(raw):
-            parsed_date = date.fromisoformat(raw)
-            parsed_datetime = datetime.combine(
-                parsed_date,
-                time.max if end_of_day else time.min,
-                tzinfo=timezone.utc,
-            )
-        else:
-            parsed_datetime = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            if parsed_datetime.tzinfo is None:
-                parsed_datetime = parsed_datetime.replace(tzinfo=timezone.utc)
-            else:
-                parsed_datetime = parsed_datetime.astimezone(timezone.utc)
-    except ValueError as exc:
-        raise ValueError(
-            f"invalid date/datetime '{value}'. Use YYYY-MM-DD or ISO datetime."
-        ) from exc
-    return int(parsed_datetime.timestamp() * 1000)
-
-
-def re_full_date(value: str) -> bool:
-    return len(value) == 10 and value[4] == "-" and value[7] == "-"
 
 
 def handle_compare(

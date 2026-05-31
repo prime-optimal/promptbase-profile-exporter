@@ -182,7 +182,7 @@ class RetryTests(unittest.TestCase):
             code=code,
             msg="boom",
             hdrs=None,
-            fp=io.BytesIO(b""),
+            fp=None,
         )
 
     def test_success_on_first_attempt_returns_decoded_json(self):
