@@ -23,6 +23,10 @@ TRANSIENT_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 DEFAULT_PAGE_SIZE = 300
 MAX_PAGES = 100
 MAX_RETRIES = 3
+# Small pause between successive pages of a paginated query. Single-page
+# fetches (the common case) never wait; multi-page fetches stay polite to the
+# public Firestore endpoint and reduce the chance of hitting rate limits.
+PAGE_DELAY_SECONDS = 0.2
 SCHEMA_DRIFT_MISSING_RATIO = 0.8
 PROMPT_ITEM_SCHEMA_FIELDS = {"slug", "title", "created", "domain", "type"}
 PROMPT_DETAIL_SCHEMA_FIELDS = {"slug", "description"}
@@ -175,6 +179,7 @@ def _run_query_all(
         if len(page_docs) < page_size:
             return docs
         start_after = _cursor_values_for_doc(page_docs[-1], order_by)
+        time.sleep(PAGE_DELAY_SECONDS)
     raise PromptBaseError(
         f"Query exceeded the pagination safety limit of {MAX_PAGES * page_size} records."
     )
@@ -354,7 +359,7 @@ def _raise_if_schema_changed(
 
 def _int_field(item: dict[str, Any], field: str) -> int:
     value = item.get(field)
-    if value in (None, ""):
+    if value is None or value == "":
         return 0
     try:
         return int(value)
@@ -366,7 +371,7 @@ def _int_field(item: dict[str, Any], field: str) -> int:
 
 def _float_field(item: dict[str, Any], field: str) -> float:
     value = item.get(field)
-    if value in (None, ""):
+    if value is None or value == "":
         return 0.0
     try:
         return float(value)

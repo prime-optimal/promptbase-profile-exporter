@@ -31,6 +31,17 @@ PRICE_FILTERS = ("all", "free", "paid")
 DEFAULT_OUTPUT_DIR = "exports"
 MAX_FORM_BYTES = 20_000
 
+# Files the /download endpoint is allowed to serve, mapped to their content
+# type. Restricting to export extensions keeps the endpoint from being used to
+# read arbitrary files even inside the working directory.
+DOWNLOAD_CONTENT_TYPES = {
+    ".txt": "text/plain; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+    ".markdown": "text/markdown; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".csv": "text/csv; charset=utf-8",
+}
+
 
 class WebInputError(ValueError):
     """Raised when a submitted web export request is invalid."""
@@ -251,14 +262,7 @@ def render_form(
     if error:
         status_block = f'<section class="notice error"><h2>Error</h2><p>{_h(error)}</p></section>'
     elif result:
-        rows = "\n".join(
-            "<tr>"
-            f"<td>{_h(item.mode)}</td>"
-            f"<td>{item.count}</td>"
-            f"<td><code>{_h(str(item.path))}</code></td>"
-            "</tr>"
-            for item in result.files
-        )
+        rows = "\n".join(_render_file_row(item) for item in result.files)
         status_block = f"""
         <section class="notice success">
           <h2>Export complete</h2>
@@ -268,7 +272,9 @@ def render_form(
             image: {result.image_records}, other: {result.other_records}.
           </p>
           <table>
-            <thead><tr><th>Mode</th><th>Prompts</th><th>File</th></tr></thead>
+            <thead>
+              <tr><th>Mode</th><th>Prompts</th><th>File</th><th>Download</th></tr>
+            </thead>
             <tbody>{rows}</tbody>
           </table>
         </section>
@@ -510,6 +516,22 @@ def render_form(
 """
 
 
+def _render_file_row(item: ExportedFile) -> str:
+    href = _download_href(item.path)
+    if href is None:
+        download_cell = "<td>—</td>"
+    else:
+        download_cell = f'<td><a href="{_h(href)}" download>Download</a></td>'
+    return (
+        "<tr>"
+        f"<td>{_h(item.mode)}</td>"
+        f"<td>{item.count}</td>"
+        f"<td><code>{_h(str(item.path))}</code></td>"
+        f"{download_cell}"
+        "</tr>"
+    )
+
+
 def render_select(name: str, options: Sequence[str], selected: str) -> str:
     items = []
     for option in options:
@@ -531,7 +553,40 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
         if path in {"", "/"}:
             self._send_html(render_form())
             return
+        if path == "/download":
+            self._handle_download()
+            return
         self._send_text("not found\n", status=404)
+
+    def _handle_download(self) -> None:
+        """Serve a previously generated export file as an attachment.
+
+        Confined to export files inside the server's working directory so the
+        endpoint cannot be turned into an arbitrary file read. A DNS-rebinding
+        guard rejects requests whose Host header does not name this server.
+        """
+        host_header = (self.headers.get("Host") or "").strip()
+        if host_header and host_header not in self._expected_authorities():
+            self._send_text("Host header not recognized.\n", status=403)
+            return
+
+        query = urllib.parse.urlparse(self.path).query
+        requested = (urllib.parse.parse_qs(query).get("file") or [""])[0]
+        if not requested:
+            self._send_text("missing file parameter\n", status=400)
+            return
+
+        base = Path.cwd().resolve()
+        candidate = (base / Path(requested)).resolve()
+        if not candidate.is_relative_to(base) or not candidate.is_file():
+            self._send_text("not found\n", status=404)
+            return
+        content_type = DOWNLOAD_CONTENT_TYPES.get(candidate.suffix.lower())
+        if content_type is None:
+            self._send_text("unsupported file type\n", status=403)
+            return
+
+        self._send_download(candidate.read_bytes(), candidate.name, content_type)
 
     def do_POST(self) -> None:
         path = urllib.parse.urlparse(self.path).path
@@ -564,7 +619,9 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
 
     def _expected_authorities(self) -> set[str]:
         """Host:port authorities this server legitimately answers to."""
-        host, port = self.server.server_address[0], self.server.server_address[1]
+        server_address = self.server.server_address
+        assert isinstance(server_address, tuple)
+        host, port = server_address[0], server_address[1]
         names = {host}
         if host in {"127.0.0.1", "0.0.0.0", "::", "::1"}:
             names |= {"127.0.0.1", "localhost", "[::1]"}
@@ -615,6 +672,20 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
 
     def _send_text(self, body: str, *, status: int = 200) -> None:
         self._send(body, "text/plain; charset=utf-8", status=status)
+
+    def _send_download(self, data: bytes, filename: str, content_type: str) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        # Force a download rather than inline rendering; the quoted filename
+        # keeps any unusual characters from breaking the header.
+        disposition = f'attachment; filename="{_content_disposition_name(filename)}"'
+        self.send_header("Content-Disposition", disposition)
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _send(self, body: str, content_type: str, *, status: int) -> None:
         data = body.encode("utf-8")
@@ -773,6 +844,22 @@ def _checked(value: bool) -> str:
 
 def _h(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+def _content_disposition_name(filename: str) -> str:
+    """Sanitize a filename for a quoted Content-Disposition header value."""
+    cleaned = filename.replace("\\", "_").replace('"', "_")
+    cleaned = cleaned.replace("\r", "").replace("\n", "")
+    return cleaned or "export"
+
+
+def _download_href(path: Path) -> str | None:
+    """Build a /download link for a path inside the working directory."""
+    try:
+        relative = path.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        return None
+    return "/download?file=" + urllib.parse.quote(relative.as_posix())
 
 
 if __name__ == "__main__":

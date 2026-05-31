@@ -35,10 +35,28 @@ promptbase-export = "promptbase_exporter.cli:main"
 promptbase-export-web = "promptbase_exporter.web:main"
 
 [project.optional-dependencies]
-dev = ["build", "ruff", "twine"]
+dev = ["build", "coverage", "mypy", "ruff", "twine"]
 
 [tool.setuptools.package-data]
 promptbase_exporter = ["py.typed"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["promptbase_exporter"]
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.coverage.run]
+source = ["promptbase_exporter"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 70
+exclude_also = [
+  "if __name__ == .__main__.:",
+  "raise SystemExit",
+]
 
 [tool.ruff]
 line-length = 100
