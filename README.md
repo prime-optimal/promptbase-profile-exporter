@@ -22,9 +22,13 @@ It is designed for prompt creators who want to back up, audit, share, or publish
 - Splits output into `all`, `text`, and `image` views, with `text-only` and `image-only` aliases.
 - Sorts every export from newest prompt to oldest prompt.
 - Writes `txt`, `markdown`, `json`, or `csv` output.
-- Filters by PromptBase domain, model/type, free/paid status, or price range.
+- Filters by PromptBase domain, model/type, free/paid status, price range, date, or result limit.
 - Sorts by newest, oldest, title, price, views, sales, downloads, favorites, or rating.
 - Exports richer JSON/CSV metadata such as views, sales, downloads, favorites, rating, and reviews.
+- Compares current exports against previous catalog files.
+- Updates an existing catalog file in place when requested.
+- Includes a local no-framework web UI.
+- Includes a reusable GitHub Action for scheduled catalog exports.
 - Can append timestamps to filenames for repeatable backups.
 - Supports dry runs and quick domain/type inventory summaries.
 - Paginates large profiles instead of stopping at the first page.
@@ -175,6 +179,20 @@ Portable module form:
 python -m promptbase_exporter --version
 ```
 
+Start the local web UI:
+
+```bash
+python -m promptbase_exporter.web
+```
+
+Then open `http://127.0.0.1:8765/`.
+
+If installed with the project script:
+
+```bash
+promptbase-export-web
+```
+
 ## Output Formats
 
 The default `.txt` file uses a simple numbered format:
@@ -218,11 +236,21 @@ Filters are applied before `--mode` output splitting:
 - `--paid-only`
 - `--min-price 2`
 - `--max-price 10`
+- `--since 2026-01-01`
+- `--until 2026-12-31`
+- `--limit 25`
 
 For example, this writes only paid GPT prompts into JSON:
 
 ```bash
 python -m promptbase_exporter @acb --mode all --format json --type gpt --paid-only
+```
+
+Date and count filters are also available:
+
+```bash
+python -m promptbase_exporter @acb --since 2026-01-01 --until 2026-12-31
+python -m promptbase_exporter @acb --sort views --limit 25
 ```
 
 Sorting is applied after filters and before writing:
@@ -237,6 +265,55 @@ Sorting is applied after filters and before writing:
 - `--sort favorites`
 - `--sort rating`
 
+## Compare And Update
+
+Compare the current profile catalog against an existing export:
+
+```bash
+python -m promptbase_exporter @acb --mode all --format json --compare exports/acb_all_prompts.json
+```
+
+Write a comparison report:
+
+```bash
+python -m promptbase_exporter @acb --mode all --compare exports/acb_all_prompts.json --diff-output exports/catalog-diff.md
+```
+
+Refresh an existing catalog file in place:
+
+```bash
+python -m promptbase_exporter @acb --mode all --update-file exports/acb_all_prompts.json
+```
+
+Write one exact file path instead of using the generated filename:
+
+```bash
+python -m promptbase_exporter @acb --mode text --output-file exports/text-prompts.csv --format csv
+```
+
+Existing `--output-file` targets are protected by default. Add `--overwrite` when replacing that file is intentional.
+
+For CI workflows, make catalog changes fail the command with exit code `2`:
+
+```bash
+python -m promptbase_exporter @acb --mode all --compare exports/acb_all_prompts.json --fail-on-diff
+```
+
+## GitHub Action
+
+This repository can be used as a composite GitHub Action:
+
+```yaml
+- uses: IACBI/promptbase-profile-exporter@v0.6.0
+  with:
+    profile-url: https://promptbase.com/profile/acb
+    mode: split
+    format: markdown
+    output-dir: exports
+```
+
+See [docs/github-action.md](docs/github-action.md) for scheduled exports, artifact uploads, and workflows that commit updated catalogs back to a repository.
+
 ## Validation
 
 Before writing files, the tool checks that:
@@ -248,6 +325,8 @@ Before writing files, the tool checks that:
 - written files contain the expected number of records
 
 If descriptions are missing for any prompt, the command finishes with a non-zero exit code unless `--allow-missing-descriptions` is used.
+
+The exporter also checks for expected public data fields. If PromptBase changes its public data model, the command reports a schema-change error instead of silently producing a misleading catalog.
 
 ## How It Works
 
@@ -275,10 +354,17 @@ Run tests:
 python -m unittest discover -s tests
 ```
 
+Run lint:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m ruff check .
+```
+
 Build the package:
 
 ```bash
-python -m pip install build twine
+python -m pip install -e ".[dev]"
 python -m build
 python -m twine check dist/*
 ```
@@ -315,17 +401,24 @@ promptbase_exporter/
   __main__.py
   cli.py
   client.py
+  diffing.py
   formatting.py
   models.py
+  web.py
 tests/
   test_cli.py
   test_client.py
+  test_diffing.py
   test_formatting.py
   test_profile_input.py
+  test_web.py
 CHANGELOG.md
 CONTRIBUTING.md
+docs/
+  github-action.md
 RELEASE.md
 SECURITY.md
+action.yml
 ```
 
 ## License

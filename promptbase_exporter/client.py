@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import time
-import urllib.parse
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -23,6 +23,8 @@ TRANSIENT_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 DEFAULT_PAGE_SIZE = 300
 MAX_PAGES = 100
 MAX_RETRIES = 3
+PROMPT_ITEM_SCHEMA_FIELDS = {"slug", "title", "created", "domain", "type"}
+PROMPT_DETAIL_SCHEMA_FIELDS = {"slug", "description"}
 
 
 class PromptBaseError(RuntimeError):
@@ -212,6 +214,7 @@ def fetch_prompt_items(profile: Profile) -> list[dict[str, Any]]:
             _order_by("__name__", "DESCENDING"),
         ],
     )
+    _raise_if_schema_changed("Items", docs, PROMPT_ITEM_SCHEMA_FIELDS)
 
     seen_slugs: set[str] = set()
     prompts: list[dict[str, Any]] = []
@@ -231,6 +234,7 @@ def fetch_prompt_details(profile: Profile) -> dict[str, dict[str, Any]]:
         [field_filter("uid", "EQUAL", {"stringValue": profile.uid})],
         order_by=[_order_by("__name__", "ASCENDING")],
     )
+    _raise_if_schema_changed("PromptDetails", docs, PROMPT_DETAIL_SCHEMA_FIELDS)
 
     by_slug: dict[str, dict[str, Any]] = {}
     for doc in docs:
@@ -260,17 +264,61 @@ def fetch_prompts(profile_input: str) -> tuple[Profile, list[PromptRecord]]:
                 slug=slug,
                 prompt_type=str(item.get("type") or "").strip(),
                 domain=str(item.get("domain") or "").strip(),
-                created=int(item.get("created") or 0),
-                price=float(item.get("price") or 0),
-                discount=float(item.get("discount") or 0),
-                views=int(item.get("views") or 0),
-                sales=int(item.get("sales") or 0),
-                downloads=int(item.get("downloads") or 0),
-                favorites=int(item.get("favorites") or 0),
-                rating=float(item.get("rating") or 0),
-                reviews=int(item.get("numReviews") or 0),
+                created=_int_field(item, "created"),
+                price=_float_field(item, "price"),
+                discount=_float_field(item, "discount"),
+                views=_int_field(item, "views"),
+                sales=_int_field(item, "sales"),
+                downloads=_int_field(item, "downloads"),
+                favorites=_int_field(item, "favorites"),
+                rating=_float_field(item, "rating"),
+                reviews=_int_field(item, "numReviews"),
             )
         )
 
     records.sort(key=lambda record: (record.created, record.slug), reverse=True)
     return profile, records
+
+
+def _raise_if_schema_changed(
+    collection: str,
+    docs: list[dict[str, Any]],
+    expected_fields: set[str],
+) -> None:
+    if not docs:
+        return
+    missing_everywhere = sorted(
+        field
+        for field in expected_fields
+        if all(field not in doc for doc in docs)
+    )
+    if missing_everywhere:
+        missing = ", ".join(missing_everywhere)
+        raise PromptBaseError(
+            f"PromptBase public data schema changed for {collection}: "
+            f"missing expected field(s) in every returned document: {missing}"
+        )
+
+
+def _int_field(item: dict[str, Any], field: str) -> int:
+    value = item.get(field)
+    if value in (None, ""):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise PromptBaseError(
+            f"Expected numeric PromptBase field '{field}', got {value!r}"
+        ) from exc
+
+
+def _float_field(item: dict[str, Any], field: str) -> float:
+    value = item.get(field)
+    if value in (None, ""):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise PromptBaseError(
+            f"Expected numeric PromptBase field '{field}', got {value!r}"
+        ) from exc

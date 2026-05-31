@@ -1,0 +1,290 @@
+name: PromptBase Profile Exporter
+description: Export public PromptBase profile prompt catalogs from GitHub Actions.
+author: PromptBase Profile Exporter contributors
+
+branding:
+  icon: download-cloud
+  color: blue
+
+inputs:
+  profile-url:
+    description: PromptBase profile URL, path, username, or @username.
+    required: true
+  mode:
+    description: Export mode. Use split, all, text, image, text-only, or image-only.
+    required: false
+    default: split
+  format:
+    description: Output format. Use txt, markdown, json, or csv.
+    required: false
+    default: txt
+  output-dir:
+    description: Directory where export files will be written.
+    required: false
+    default: exports
+  sort:
+    description: Sort order. Use newest, oldest, title, price, views, sales, downloads, favorites, or rating.
+    required: false
+    default: newest
+  domain:
+    description: Optional comma-separated domain filter, for example text,image,video.
+    required: false
+    default: ""
+  type:
+    description: Optional comma-separated PromptBase type filter, for example gpt,claude.
+    required: false
+    default: ""
+  price-mode:
+    description: Optional price filter. Use free, paid, or leave empty for all prices.
+    required: false
+    default: ""
+  min-price:
+    description: Optional minimum price.
+    required: false
+    default: ""
+  max-price:
+    description: Optional maximum price.
+    required: false
+    default: ""
+  limit:
+    description: Optional maximum number of prompts after filtering and sorting.
+    required: false
+    default: ""
+  since:
+    description: Optional inclusive created-date filter, for example 2026-01-01.
+    required: false
+    default: ""
+  until:
+    description: Optional inclusive created-date filter, for example 2026-12-31.
+    required: false
+    default: ""
+  compare:
+    description: Optional existing catalog path to compare against.
+    required: false
+    default: ""
+  diff-output:
+    description: Optional path where the comparison report should be written.
+    required: false
+    default: ""
+  fail-on-diff:
+    description: Exit with code 2 when compare finds changes.
+    required: false
+    default: "false"
+  timestamp-filenames:
+    description: Append a YYYYMMDD_HHMMSS timestamp to generated filenames.
+    required: false
+    default: "false"
+  allow-missing-descriptions:
+    description: Write files even if one or more prompt descriptions are missing.
+    required: false
+    default: "false"
+  python-version:
+    description: Python version used to run the exporter.
+    required: false
+    default: "3.12"
+  working-directory:
+    description: Directory where the export command should run.
+    required: false
+    default: "."
+  upload-artifact:
+    description: Upload the output directory as a workflow artifact.
+    required: false
+    default: "true"
+  artifact-name:
+    description: Name of the uploaded artifact.
+    required: false
+    default: promptbase-exports
+
+outputs:
+  output-dir:
+    description: Directory containing generated export files.
+    value: ${{ inputs.output-dir }}
+  artifact-name:
+    description: Uploaded artifact name when upload-artifact is true.
+    value: ${{ inputs.artifact-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install exporter
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        python -m pip install "$GITHUB_ACTION_PATH"
+
+    - name: Validate action inputs
+      id: action-inputs
+      shell: bash
+      env:
+        UPLOAD_ARTIFACT: ${{ inputs.upload-artifact }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+
+        normalize_bool() {
+          printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+        }
+
+        case "$(normalize_bool "$UPLOAD_ARTIFACT")" in
+          true|"")
+            echo "upload_artifact=true" >> "$GITHUB_OUTPUT"
+            ;;
+          false)
+            echo "upload_artifact=false" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "::error::upload-artifact must be true or false."
+            exit 1
+            ;;
+        esac
+
+        if [[ "$OUTPUT_DIR" = /* ]]; then
+          artifact_path="$OUTPUT_DIR"
+        elif [[ "$WORKING_DIRECTORY" = "." || -z "$WORKING_DIRECTORY" ]]; then
+          artifact_path="$OUTPUT_DIR"
+        else
+          artifact_path="${WORKING_DIRECTORY%/}/${OUTPUT_DIR#./}"
+        fi
+
+        echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
+
+    - name: Export PromptBase profile
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PROFILE_URL: ${{ inputs.profile-url }}
+        MODE: ${{ inputs.mode }}
+        FORMAT: ${{ inputs.format }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        SORT: ${{ inputs.sort }}
+        DOMAIN: ${{ inputs.domain }}
+        PROMPT_TYPE: ${{ inputs.type }}
+        PRICE_MODE: ${{ inputs.price-mode }}
+        MIN_PRICE: ${{ inputs.min-price }}
+        MAX_PRICE: ${{ inputs.max-price }}
+        LIMIT: ${{ inputs.limit }}
+        SINCE: ${{ inputs.since }}
+        UNTIL: ${{ inputs.until }}
+        COMPARE: ${{ inputs.compare }}
+        DIFF_OUTPUT: ${{ inputs.diff-output }}
+        FAIL_ON_DIFF: ${{ inputs.fail-on-diff }}
+        TIMESTAMP_FILENAMES: ${{ inputs.timestamp-filenames }}
+        ALLOW_MISSING_DESCRIPTIONS: ${{ inputs.allow-missing-descriptions }}
+      run: |
+        set -euo pipefail
+
+        normalize_bool() {
+          printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+        }
+
+        args=(
+          "$PROFILE_URL"
+          "--mode" "$MODE"
+          "--format" "$FORMAT"
+          "--output-dir" "$OUTPUT_DIR"
+          "--sort" "$SORT"
+        )
+
+        if [[ -n "$DOMAIN" ]]; then
+          args+=("--domain" "$DOMAIN")
+        fi
+
+        if [[ -n "$PROMPT_TYPE" ]]; then
+          args+=("--type" "$PROMPT_TYPE")
+        fi
+
+        case "$(normalize_bool "$PRICE_MODE")" in
+          "")
+            ;;
+          free)
+            args+=("--free-only")
+            ;;
+          paid)
+            args+=("--paid-only")
+            ;;
+          *)
+            echo "::error::price-mode must be empty, free, or paid."
+            exit 1
+            ;;
+        esac
+
+        if [[ -n "$MIN_PRICE" ]]; then
+          args+=("--min-price" "$MIN_PRICE")
+        fi
+
+        if [[ -n "$MAX_PRICE" ]]; then
+          args+=("--max-price" "$MAX_PRICE")
+        fi
+
+        if [[ -n "$LIMIT" ]]; then
+          args+=("--limit" "$LIMIT")
+        fi
+
+        if [[ -n "$SINCE" ]]; then
+          args+=("--since" "$SINCE")
+        fi
+
+        if [[ -n "$UNTIL" ]]; then
+          args+=("--until" "$UNTIL")
+        fi
+
+        if [[ -n "$COMPARE" ]]; then
+          args+=("--compare" "$COMPARE")
+        fi
+
+        if [[ -n "$DIFF_OUTPUT" ]]; then
+          args+=("--diff-output" "$DIFF_OUTPUT")
+        fi
+
+        case "$(normalize_bool "$FAIL_ON_DIFF")" in
+          true)
+            args+=("--fail-on-diff")
+            ;;
+          false|"")
+            ;;
+          *)
+            echo "::error::fail-on-diff must be true or false."
+            exit 1
+            ;;
+        esac
+
+        case "$(normalize_bool "$TIMESTAMP_FILENAMES")" in
+          true)
+            args+=("--timestamp-filenames")
+            ;;
+          false|"")
+            ;;
+          *)
+            echo "::error::timestamp-filenames must be true or false."
+            exit 1
+            ;;
+        esac
+
+        case "$(normalize_bool "$ALLOW_MISSING_DESCRIPTIONS")" in
+          true)
+            args+=("--allow-missing-descriptions")
+            ;;
+          false|"")
+            ;;
+          *)
+            echo "::error::allow-missing-descriptions must be true or false."
+            exit 1
+            ;;
+        esac
+
+        promptbase-export "${args[@]}"
+
+    - name: Upload exports
+      if: ${{ steps.action-inputs.outputs.upload_artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.action-inputs.outputs.artifact_path }}
+        if-no-files-found: error

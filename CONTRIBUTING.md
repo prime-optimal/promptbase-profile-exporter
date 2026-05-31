@@ -22,7 +22,8 @@ python -m unittest discover -s tests
 ```bash
 python -m unittest discover -s tests
 python -m promptbase_exporter --version
-python -m pip install build twine
+python -m pip install -e ".[dev]"
+python -m ruff check .
 python -m build
 python -m twine check dist/*
 ```
@@ -33,6 +34,7 @@ When changing PromptBase fetching behavior, run at least one real export:
 
 ```bash
 python -m promptbase_exporter https://promptbase.com/profile/acb --dry-run
+python -m promptbase_exporter https://promptbase.com/profile/acb --mode all --limit 5 --dry-run
 ```
 
 Avoid committing generated `exports/` files.

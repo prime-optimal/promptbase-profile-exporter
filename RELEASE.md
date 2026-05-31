@@ -7,12 +7,15 @@ Use this checklist when publishing a new version.
 - `promptbase_exporter/__init__.py`
 - `pyproject.toml`
 - `CHANGELOG.md`
+- `docs/github-action.md` release tag examples, when needed
 
 ## 2. Run Local Validation
 
 ```bash
 python -m unittest discover -s tests
+python -m ruff check .
 python -m promptbase_exporter --version
+python -m promptbase_exporter.web --version
 python -m promptbase_exporter https://promptbase.com/profile/acb --dry-run
 python -m promptbase_exporter https://promptbase.com/profile/acb --list-domains
 ```
@@ -20,7 +23,7 @@ python -m promptbase_exporter https://promptbase.com/profile/acb --list-domains
 ## 3. Build Package
 
 ```bash
-python -m pip install build twine
+python -m pip install -e ".[dev]"
 python -m build
 python -m twine check dist/*
 ```

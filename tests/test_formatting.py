@@ -10,9 +10,11 @@ from promptbase_exporter.formatting import (
     format_records_as_json,
     format_records_as_markdown,
     format_records_as_text,
+    infer_format_from_path,
     sort_records,
     sorted_newest_to_oldest,
     write_export,
+    write_export_to_path,
 )
 from promptbase_exporter.models import PromptRecord
 
@@ -53,10 +55,10 @@ class FormattingTests(unittest.TestCase):
 
     def test_filter_records_by_metadata(self):
         records = [
-            record("Free GPT", "text", 4, price=0, prompt_type="gpt"),
-            record("Paid Claude", "text", 3, price=4.99, prompt_type="claude"),
-            record("Paid Image", "image", 2, price=2.99, prompt_type="chatgpt-image"),
-            record("Video", "video", 1, price=9.99, prompt_type="sora"),
+            record("Free GPT", "text", 4_000, price=0, prompt_type="gpt"),
+            record("Paid Claude", "text", 3_000, price=4.99, prompt_type="claude"),
+            record("Paid Image", "image", 2_000, price=2.99, prompt_type="chatgpt-image"),
+            record("Video", "video", 1_000, price=9.99, prompt_type="sora"),
         ]
 
         filtered = filter_records_by_metadata(
@@ -69,7 +71,18 @@ class FormattingTests(unittest.TestCase):
         )
 
         self.assertEqual([r.title for r in filtered], ["Paid Claude"])
-        self.assertEqual([r.title for r in filter_records_by_metadata(records, free_only=True)], ["Free GPT"])
+        self.assertEqual(
+            [r.title for r in filter_records_by_metadata(records, free_only=True)],
+            ["Free GPT"],
+        )
+        self.assertEqual(
+            [r.title for r in filter_records_by_metadata(records, since_created=2_500)],
+            ["Free GPT", "Paid Claude"],
+        )
+        self.assertEqual(
+            [r.title for r in filter_records_by_metadata(records, until_created=2_500)],
+            ["Paid Image", "Video"],
+        )
 
     def test_format_records_as_text(self):
         text = format_records_as_text([record("Text One", "text", 1)])
@@ -112,10 +125,22 @@ class FormattingTests(unittest.TestCase):
             record("Gamma", "text", 1, price=3, views=1, sales=5),
         ]
 
-        self.assertEqual([r.title for r in sort_records(records, "title")], ["Alpha", "Beta", "Gamma"])
-        self.assertEqual([r.title for r in sort_records(records, "oldest")], ["Gamma", "Beta", "Alpha"])
-        self.assertEqual([r.title for r in sort_records(records, "price")], ["Gamma", "Beta", "Alpha"])
-        self.assertEqual([r.title for r in sort_records(records, "views")], ["Alpha", "Beta", "Gamma"])
+        self.assertEqual(
+            [r.title for r in sort_records(records, "title")],
+            ["Alpha", "Beta", "Gamma"],
+        )
+        self.assertEqual(
+            [r.title for r in sort_records(records, "oldest")],
+            ["Gamma", "Beta", "Alpha"],
+        )
+        self.assertEqual(
+            [r.title for r in sort_records(records, "price")],
+            ["Gamma", "Beta", "Alpha"],
+        )
+        self.assertEqual(
+            [r.title for r in sort_records(records, "views")],
+            ["Alpha", "Beta", "Gamma"],
+        )
 
     def test_write_export_counts_records_by_format(self):
         records = [record("Text One", "text", 2), record("Image One", "image", 1)]
@@ -124,6 +149,25 @@ class FormattingTests(unittest.TestCase):
             for export_format in ("txt", "markdown", "json", "csv"):
                 output_path = write_export(output_dir, "acb", "all", records, export_format)
                 self.assertEqual(count_written_records(output_path, export_format), 2)
+
+    def test_write_export_to_path_refuses_existing_without_overwrite(self):
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "catalog.json"
+            output_path.write_text("[]\n", encoding="utf-8")
+
+            with self.assertRaises(FileExistsError):
+                write_export_to_path(
+                    output_path,
+                    [record("Text One", "text", 1)],
+                    "json",
+                    overwrite=False,
+                )
+
+    def test_infer_format_from_path(self):
+        self.assertEqual(infer_format_from_path(Path("catalog.txt")), "txt")
+        self.assertEqual(infer_format_from_path(Path("catalog.md")), "markdown")
+        self.assertEqual(infer_format_from_path(Path("catalog.json")), "json")
+        self.assertEqual(infer_format_from_path(Path("catalog.csv")), "csv")
 
     def test_sorted_newest_to_oldest(self):
         self.assertTrue(sorted_newest_to_oldest([record("A", "text", 2), record("B", "text", 1)]))

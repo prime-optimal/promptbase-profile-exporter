@@ -1,20 +1,22 @@
 import io
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from promptbase_exporter.cli import count_by, main
+from promptbase_exporter.cli import count_by, main, parse_datetime_ms
 from promptbase_exporter.models import Profile, PromptRecord
 
 
-def record(title, domain, prompt_type, price=0.0):
+def record(title, domain, prompt_type, price=0.0, created=1):
     return PromptRecord(
         title=title,
         description=f"{title} description",
         slug=title.lower().replace(" ", "-"),
         prompt_type=prompt_type,
         domain=domain,
-        created=1,
+        created=created,
         price=price,
     )
 
@@ -64,6 +66,121 @@ class CliTests(unittest.TestCase):
         write_export.assert_not_called()
         self.assertIn("Domains:", stdout.getvalue())
         self.assertIn("text: 1", stdout.getvalue())
+
+    def test_output_file_refuses_existing_without_overwrite(self):
+        records = [record("A", "text", "gpt")]
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "catalog.json"
+            output_path.write_text("[]\n", encoding="utf-8")
+            with patch(
+                "promptbase_exporter.cli.fetch_prompts",
+                return_value=(Profile(username="acb", uid="uid-1"), records),
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = main(["@acb", "--mode", "all", "--output-file", str(output_path)])
+
+        self.assertEqual(exit_code, 1)
+
+    def test_output_file_infers_json_and_writes(self):
+        records = [record("A", "text", "gpt")]
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "catalog.json"
+            with patch(
+                "promptbase_exporter.cli.fetch_prompts",
+                return_value=(Profile(username="acb", uid="uid-1"), records),
+            ):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    exit_code = main(["@acb", "--mode", "all", "--output-file", str(output_path)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn('"title": "A"', output_path.read_text(encoding="utf-8"))
+
+    def test_update_file_compares_and_rewrites_existing_catalog(self):
+        records = [record("New", "text", "gpt")]
+        old_text = "1.\nTitle: Old\nDescription:\nOld description\n"
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "catalog.txt"
+            output_path.write_text(old_text, encoding="utf-8")
+            stdout = io.StringIO()
+            with patch(
+                "promptbase_exporter.cli.fetch_prompts",
+                return_value=(Profile(username="acb", uid="uid-1"), records),
+            ), redirect_stdout(stdout):
+                exit_code = main(["@acb", "--mode", "all", "--update-file", str(output_path)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("- Added: 1", stdout.getvalue())
+            self.assertIn("Title: New", output_path.read_text(encoding="utf-8"))
+
+    def test_compare_can_fail_on_diff(self):
+        records = [record("New", "text", "gpt")]
+        with TemporaryDirectory() as directory:
+            previous_path = Path(directory) / "catalog.json"
+            previous_path.write_text("[]\n", encoding="utf-8")
+            stdout = io.StringIO()
+            with patch(
+                "promptbase_exporter.cli.fetch_prompts",
+                return_value=(Profile(username="acb", uid="uid-1"), records),
+            ), redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "@acb",
+                        "--mode",
+                        "all",
+                        "--compare",
+                        str(previous_path),
+                        "--fail-on-diff",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("- Added: 1", stdout.getvalue())
+
+    def test_since_until_and_limit_filter_selected_records(self):
+        records = [
+            record(
+                "Newest",
+                "text",
+                "gpt",
+                created=parse_datetime_ms("2026-03-01", end_of_day=False),
+            ),
+            record(
+                "Middle",
+                "text",
+                "gpt",
+                created=parse_datetime_ms("2026-02-01", end_of_day=False),
+            ),
+            record(
+                "Oldest",
+                "text",
+                "gpt",
+                created=parse_datetime_ms("2026-01-01", end_of_day=False),
+            ),
+        ]
+        with patch(
+            "promptbase_exporter.cli.fetch_prompts",
+            return_value=(Profile(username="acb", uid="uid-1"), records),
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "@acb",
+                        "--since",
+                        "2026-01-15",
+                        "--until",
+                        "2026-03-31",
+                        "--limit",
+                        "1",
+                        "--dry-run",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Selected after filters: 1", stdout.getvalue())
 
     def test_text_only_mode_alias_writes_text_export(self):
         records = [

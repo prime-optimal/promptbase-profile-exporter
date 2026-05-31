@@ -53,6 +53,8 @@ def filter_records_by_metadata(
     paid_only: bool = False,
     min_price: float | None = None,
     max_price: float | None = None,
+    since_created: int | None = None,
+    until_created: int | None = None,
 ) -> list[PromptRecord]:
     filtered = list(records)
     if domains:
@@ -69,6 +71,10 @@ def filter_records_by_metadata(
         filtered = [record for record in filtered if record.price >= min_price]
     if max_price is not None:
         filtered = [record for record in filtered if record.price <= max_price]
+    if since_created is not None:
+        filtered = [record for record in filtered if record.created >= since_created]
+    if until_created is not None:
+        filtered = [record for record in filtered if record.created <= until_created]
     return filtered
 
 
@@ -217,6 +223,7 @@ def write_export(
     records: list[PromptRecord],
     export_format: str,
     timestamp: str | None = None,
+    overwrite: bool = True,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / expected_timestamped_filename(
@@ -225,8 +232,35 @@ def write_export(
         export_format,
         timestamp,
     )
+    write_export_to_path(output_path, records, export_format, overwrite=overwrite)
+    return output_path
+
+
+def write_export_to_path(
+    output_path: Path,
+    records: list[PromptRecord],
+    export_format: str,
+    *,
+    overwrite: bool,
+) -> Path:
+    if output_path.exists() and not overwrite:
+        raise FileExistsError(f"Output file already exists: {output_path}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(format_records(records, export_format), encoding="utf-8", newline="\n")
     return output_path
+
+
+def infer_format_from_path(path: Path) -> str:
+    extension = path.suffix.lower()
+    if extension == ".txt":
+        return "txt"
+    if extension in {".md", ".markdown"}:
+        return "markdown"
+    if extension == ".json":
+        return "json"
+    if extension == ".csv":
+        return "csv"
+    raise ValueError(f"Cannot infer export format from extension: {path.suffix}")
 
 
 def count_written_records(path: Path, export_format: str) -> int:

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.6.0
+
+- Add catalog comparison with `--compare`, `--diff-output`, and `--fail-on-diff`.
+- Add `--update-file` for controlled in-place catalog refreshes.
+- Add `--output-file` and `--overwrite` for exact single-file exports.
+- Add `--limit`, `--since`, and `--until` filters.
+- Add schema drift checks for PromptBase public data fields.
+- Add a local web UI through `python -m promptbase_exporter.web` and `promptbase-export-web`.
+- Add a composite GitHub Action with artifact upload support.
+- Add Ruff lint configuration and CI lint checks.
+
 ## 0.5.0
 
 - Add `--sort` with newest, oldest, title, price, views, sales, downloads, favorites, and rating options.
