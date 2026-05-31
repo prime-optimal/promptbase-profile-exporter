@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+from . import __version__
 from .client import PromptBaseError, fetch_prompts
 from .formatting import (
     EXPORT_FORMATS,
@@ -22,7 +24,7 @@ MODES = ("split", "all", "text", "image")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="promptbase-export",
-        description="Export public PromptBase profile prompts to text files.",
+        description="Export public PromptBase profile prompts to catalog files.",
     )
     parser.add_argument(
         "profile",
@@ -47,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=EXPORT_FORMATS,
         default="txt",
         help="Output file format.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
         "--allow-missing-descriptions",
@@ -87,6 +94,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--timestamp-filenames",
         action="store_true",
         help="Append a YYYYMMDD_HHMMSS timestamp to generated filenames.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Fetch, filter, and validate records without writing files.",
+    )
+    parser.add_argument(
+        "--list-domains",
+        action="store_true",
+        help="Print domain counts after filters and exit without writing files.",
+    )
+    parser.add_argument(
+        "--list-types",
+        action="store_true",
+        help="Print PromptBase type counts after filters and exit without writing files.",
     )
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument(
@@ -185,6 +207,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.min_price is not None or args.max_price is not None:
                 print(f"Price range: {args.min_price}..{args.max_price}")
 
+    if args.list_domains:
+        print_counts("Domains", count_by(selected_records, "domain"))
+    if args.list_types:
+        print_counts("Types", count_by(selected_records, "prompt_type"))
+
+    if args.dry_run or args.list_domains or args.list_types:
+        if not args.quiet:
+            print("Dry run: no files written.")
+        return 0
+
     for mode in modes:
         filtered = filter_records(selected_records, mode)
         output_path = write_export(
@@ -216,3 +248,14 @@ def main(argv: list[str] | None = None) -> int:
             f"other={other_count}, selected={len(selected_records)}, all={len(records)}"
         )
     return 0
+
+
+def count_by(records, attribute: str) -> dict[str, int]:
+    counts = Counter((getattr(record, attribute) or "unknown") for record in records)
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def print_counts(title: str, counts: dict[str, int]) -> None:
+    print(f"{title}:")
+    for key, value in counts.items():
+        print(f"  {key}: {value}")

@@ -24,6 +24,7 @@ It is designed for prompt creators who want to back up, audit, share, or publish
 - Writes `txt`, `markdown`, `json`, or `csv` output.
 - Filters by PromptBase domain, model/type, free/paid status, or price range.
 - Can append timestamps to filenames for repeatable backups.
+- Supports dry runs and quick domain/type inventory summaries.
 - Paginates large profiles instead of stopping at the first page.
 - Retries transient PromptBase/network failures with backoff.
 - Performs basic validation before writing files.
@@ -120,6 +121,19 @@ Export paid prompts between two prices:
 python -m promptbase_exporter @acb --paid-only --min-price 2 --max-price 6
 ```
 
+Preview what would be exported without writing files:
+
+```bash
+python -m promptbase_exporter @acb --dry-run
+```
+
+List domains and PromptBase types:
+
+```bash
+python -m promptbase_exporter @acb --list-domains
+python -m promptbase_exporter @acb --list-types
+```
+
 Create timestamped backup files:
 
 ```bash
@@ -130,6 +144,18 @@ Show help:
 
 ```bash
 python -m promptbase_exporter --help
+```
+
+Show the installed version:
+
+```bash
+promptbase-export --version
+```
+
+Portable module form:
+
+```bash
+python -m promptbase_exporter --version
 ```
 
 ## Output Formats
