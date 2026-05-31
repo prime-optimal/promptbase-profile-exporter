@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Stop the Markdown export validation check from over-counting prompts whose
+  descriptions contain `## N.` heading lines, which previously failed valid
+  exports with a spurious record-count error.
+- Do not overwrite the existing catalog during an `--update-file` run when the
+  requested `--diff-output` report cannot be written; the run now aborts with
+  exit code 1 and leaves the catalog untouched.
+- Return HTTP 400 (not 500) for invalid `since`/`until` dates in the web UI.
+
+### Changed
+
+- Report file-write failures (directory exports, single-file exports, and diff
+  reports) as clear `error:` messages with exit code 1 instead of raw
+  tracebacks.
+- Validate `--min-price` and `--max-price` before fetching, so invalid values
+  fail immediately without a network call.
+
 ### Security
 
 - Confine web UI exports to the server's working directory; reject absolute
@@ -16,14 +34,16 @@ All notable changes to this project will be documented in this file.
 - Pin GitHub Actions to commit SHAs and scope the test workflow token to
   `contents: read`.
 
-### Fixed
+### Documentation
 
-- Return HTTP 400 (not 500) for invalid `since`/`until` dates in the web UI.
+- Document the CLI exit codes (`0` success, `1` error, `2` catalog drift) and
+  the local web UI security model in the README.
 
 ### Internal
 
-- Remove the unused offset-pagination path in the Firestore client and add
-  retry-path test coverage.
+- Remove the unused offset-pagination path in the Firestore client.
+- Add test coverage for the network retry path, date parsing, argument
+  validation, and file-write failure handling.
 
 ## 0.6.0
 
