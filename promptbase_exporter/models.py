@@ -17,6 +17,7 @@ class PromptRecord:
     prompt_type: str
     domain: str
     created: int
+    price: float
 
     @property
     def url(self) -> str:
@@ -29,3 +30,7 @@ class PromptRecord:
     @property
     def is_image(self) -> bool:
         return self.domain == "image"
+
+    @property
+    def is_free(self) -> bool:
+        return self.price == 0

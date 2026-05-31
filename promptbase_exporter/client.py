@@ -261,6 +261,7 @@ def fetch_prompts(profile_input: str) -> tuple[Profile, list[PromptRecord]]:
                 prompt_type=str(item.get("type") or "").strip(),
                 domain=str(item.get("domain") or "").strip(),
                 created=int(item.get("created") or 0),
+                price=float(item.get("price") or 0),
             )
         )
 

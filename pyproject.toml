@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptbase-profile-exporter"
-version = "0.2.0"
+version = "0.3.0"
 description = "Export public PromptBase profile prompts into TXT, Markdown, JSON, and CSV catalogs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,10 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Utilities"
 ]
+
+[project.urls]
+Homepage = "https://github.com/IACBI/promptbase-profile-exporter"
+Issues = "https://github.com/IACBI/promptbase-profile-exporter/issues"
 
 [project.scripts]
 promptbase-export = "promptbase_exporter.cli:main"

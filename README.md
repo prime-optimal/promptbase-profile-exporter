@@ -1,5 +1,9 @@
 # PromptBase Profile Exporter
 
+[![tests](https://github.com/IACBI/promptbase-profile-exporter/actions/workflows/tests.yml/badge.svg)](https://github.com/IACBI/promptbase-profile-exporter/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Export public PromptBase profile prompts into clean, readable catalog files.
 
 This small command-line tool takes a PromptBase profile URL, finds the public prompts on that profile, pulls each prompt title and description, and writes curated exports:
@@ -18,6 +22,8 @@ It is designed for prompt creators who want to back up, audit, share, or publish
 - Splits output into `all`, `text`, and `image` views.
 - Sorts every export from newest prompt to oldest prompt.
 - Writes `txt`, `markdown`, `json`, or `csv` output.
+- Filters by PromptBase domain, model/type, free/paid status, or price range.
+- Can append timestamps to filenames for repeatable backups.
 - Paginates large profiles instead of stopping at the first page.
 - Retries transient PromptBase/network failures with backoff.
 - Performs basic validation before writing files.
@@ -26,7 +32,7 @@ It is designed for prompt creators who want to back up, audit, share, or publish
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-username/promptbase-profile-exporter.git
+git clone https://github.com/IACBI/promptbase-profile-exporter.git
 cd promptbase-profile-exporter
 python -m promptbase_exporter https://promptbase.com/profile/acb
 ```
@@ -102,6 +108,24 @@ Export CSV for spreadsheets:
 python -m promptbase_exporter @acb --mode text --format csv
 ```
 
+Export only Claude text prompts:
+
+```bash
+python -m promptbase_exporter @acb --mode text --type claude
+```
+
+Export paid prompts between two prices:
+
+```bash
+python -m promptbase_exporter @acb --paid-only --min-price 2 --max-price 6
+```
+
+Create timestamped backup files:
+
+```bash
+python -m promptbase_exporter @acb --timestamp-filenames
+```
+
 Show help:
 
 ```bash
@@ -127,7 +151,7 @@ Another public description appears here.
 Markdown output is designed for GitHub-readable catalogs. JSON and CSV output include these fields:
 
 ```text
-title, description, slug, url, type, domain, created
+title, description, slug, url, type, domain, created, price
 ```
 
 ## Prompt Groups
@@ -139,6 +163,23 @@ The exporter uses PromptBase's public prompt metadata:
 - `all`: every approved prompt returned for the profile, including text, image, video, or other domains if present
 
 Every group is sorted by the prompt creation timestamp from newest to oldest.
+
+## Filters
+
+Filters are applied before `--mode` output splitting:
+
+- `--domain text,image,video`
+- `--type gpt,claude,chatgpt-image`
+- `--free-only`
+- `--paid-only`
+- `--min-price 2`
+- `--max-price 10`
+
+For example, this writes only paid GPT prompts into JSON:
+
+```bash
+python -m promptbase_exporter @acb --mode all --format json --type gpt --paid-only
+```
 
 ## Validation
 
@@ -161,7 +202,8 @@ PromptBase is a dynamic site backed by public Firebase/Firestore data. This tool
 3. Fetch approved prompt items for that user id.
 4. Fetch matching prompt detail documents.
 5. Merge title, slug, type, domain, creation time, and description.
-6. Write clean exports in the requested format.
+6. Apply user-selected filters.
+7. Write clean exports in the requested format.
 
 No login, API key, browser automation, or paid account is required.
 

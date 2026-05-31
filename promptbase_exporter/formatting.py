@@ -17,6 +17,12 @@ FORMAT_EXTENSIONS = {
 }
 
 
+def parse_csv_option(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {part.strip().lower() for part in value.split(",") if part.strip()}
+
+
 def filter_records(records: list[PromptRecord], mode: str) -> list[PromptRecord]:
     if mode == "all":
         return list(records)
@@ -25,6 +31,34 @@ def filter_records(records: list[PromptRecord], mode: str) -> list[PromptRecord]
     if mode == "image":
         return [record for record in records if record.is_image]
     raise ValueError(f"Unsupported mode: {mode}")
+
+
+def filter_records_by_metadata(
+    records: list[PromptRecord],
+    *,
+    domains: set[str] | None = None,
+    prompt_types: set[str] | None = None,
+    free_only: bool = False,
+    paid_only: bool = False,
+    min_price: float | None = None,
+    max_price: float | None = None,
+) -> list[PromptRecord]:
+    filtered = list(records)
+    if domains:
+        filtered = [record for record in filtered if record.domain.lower() in domains]
+    if prompt_types:
+        filtered = [
+            record for record in filtered if record.prompt_type.lower() in prompt_types
+        ]
+    if free_only:
+        filtered = [record for record in filtered if record.is_free]
+    if paid_only:
+        filtered = [record for record in filtered if not record.is_free]
+    if min_price is not None:
+        filtered = [record for record in filtered if record.price >= min_price]
+    if max_price is not None:
+        filtered = [record for record in filtered if record.price <= max_price]
+    return filtered
 
 
 def format_records_as_text(records: list[PromptRecord]) -> str:
@@ -51,6 +85,7 @@ def format_records_as_markdown(records: list[PromptRecord]) -> str:
                 f"- URL: {record.url}",
                 f"- Domain: {record.domain or 'unknown'}",
                 f"- Type: {record.prompt_type or 'unknown'}",
+                f"- Price: {record.price:g}",
                 "",
                 description.strip(),
                 "",
@@ -68,6 +103,7 @@ def record_to_dict(record: PromptRecord) -> dict[str, object]:
         "type": record.prompt_type,
         "domain": record.domain,
         "created": record.created,
+        "price": record.price,
     }
 
 
@@ -77,7 +113,16 @@ def format_records_as_json(records: list[PromptRecord]) -> str:
 
 
 def format_records_as_csv(records: list[PromptRecord]) -> str:
-    fieldnames = ["title", "description", "slug", "url", "type", "domain", "created"]
+    fieldnames = [
+        "title",
+        "description",
+        "slug",
+        "url",
+        "type",
+        "domain",
+        "created",
+        "price",
+    ]
     rows = [record_to_dict(record) for record in records]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
@@ -104,15 +149,34 @@ def expected_filename(username: str, mode: str, export_format: str = "txt") -> s
     return f"{safe_username}_{mode}_prompts.{extension}"
 
 
+def expected_timestamped_filename(
+    username: str,
+    mode: str,
+    export_format: str,
+    timestamp: str | None,
+) -> str:
+    if not timestamp:
+        return expected_filename(username, mode, export_format)
+    safe_username = re.sub(r"[^A-Za-z0-9_.-]+", "_", username).strip("_")
+    extension = FORMAT_EXTENSIONS[export_format]
+    return f"{safe_username}_{mode}_prompts_{timestamp}.{extension}"
+
+
 def write_export(
     output_dir: Path,
     username: str,
     mode: str,
     records: list[PromptRecord],
     export_format: str,
+    timestamp: str | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / expected_filename(username, mode, export_format)
+    output_path = output_dir / expected_timestamped_filename(
+        username,
+        mode,
+        export_format,
+        timestamp,
+    )
     output_path.write_text(format_records(records, export_format), encoding="utf-8", newline="\n")
     return output_path
 

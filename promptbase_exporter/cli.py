@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .client import PromptBaseError, fetch_prompts
@@ -9,6 +10,8 @@ from .formatting import (
     EXPORT_FORMATS,
     count_written_records,
     filter_records,
+    filter_records_by_metadata,
+    parse_csv_option,
     sorted_newest_to_oldest,
     write_export,
 )
@@ -50,6 +53,52 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write files even if one or more prompt descriptions are missing.",
     )
+    parser.add_argument(
+        "--domain",
+        help="Comma-separated domain filter, for example: text,image,video.",
+    )
+    parser.add_argument(
+        "--type",
+        dest="prompt_type",
+        help="Comma-separated PromptBase type filter, for example: gpt,claude.",
+    )
+    price_group = parser.add_mutually_exclusive_group()
+    price_group.add_argument(
+        "--free-only",
+        action="store_true",
+        help="Export only free prompts.",
+    )
+    price_group.add_argument(
+        "--paid-only",
+        action="store_true",
+        help="Export only paid prompts.",
+    )
+    parser.add_argument(
+        "--min-price",
+        type=float,
+        help="Export prompts priced at or above this amount.",
+    )
+    parser.add_argument(
+        "--max-price",
+        type=float,
+        help="Export prompts priced at or below this amount.",
+    )
+    parser.add_argument(
+        "--timestamp-filenames",
+        action="store_true",
+        help="Append a YYYYMMDD_HHMMSS timestamp to generated filenames.",
+    )
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress normal command output.",
+    )
+    output_group.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print extra filtering details.",
+    )
     return parser
 
 
@@ -71,7 +120,34 @@ def main(argv: list[str] | None = None) -> int:
         print("error: prompt records are not sorted newest to oldest", file=sys.stderr)
         return 1
 
-    missing_descriptions = [record for record in records if not record.description]
+    if args.min_price is not None and args.min_price < 0:
+        print("error: --min-price cannot be negative", file=sys.stderr)
+        return 1
+    if args.max_price is not None and args.max_price < 0:
+        print("error: --max-price cannot be negative", file=sys.stderr)
+        return 1
+    if (
+        args.min_price is not None
+        and args.max_price is not None
+        and args.min_price > args.max_price
+    ):
+        print("error: --min-price cannot be greater than --max-price", file=sys.stderr)
+        return 1
+
+    selected_records = filter_records_by_metadata(
+        records,
+        domains=parse_csv_option(args.domain),
+        prompt_types=parse_csv_option(args.prompt_type),
+        free_only=args.free_only,
+        paid_only=args.paid_only,
+        min_price=args.min_price,
+        max_price=args.max_price,
+    )
+    if not selected_records:
+        print("error: no prompts matched the selected filters", file=sys.stderr)
+        return 1
+
+    missing_descriptions = [record for record in selected_records if not record.description]
     if missing_descriptions and not args.allow_missing_descriptions:
         print(
             "error: missing descriptions for "
@@ -85,18 +161,39 @@ def main(argv: list[str] | None = None) -> int:
 
     modes = ["all", "text", "image"] if args.mode == "split" else [args.mode]
     output_dir = Path(args.output_dir)
+    timestamp = (
+        datetime.now().strftime("%Y%m%d_%H%M%S")
+        if args.timestamp_filenames
+        else None
+    )
 
-    print(f"Profile: @{profile.username}")
-    print(f"Approved prompts found: {len(records)}")
+    if not args.quiet:
+        print(f"Profile: @{profile.username}")
+        print(f"Approved prompts found: {len(records)}")
+        print(f"Selected after filters: {len(selected_records)}")
+        if args.verbose:
+            print(f"Format: {args.format}")
+            print(f"Output directory: {output_dir}")
+            if args.domain:
+                print(f"Domain filter: {args.domain}")
+            if args.prompt_type:
+                print(f"Type filter: {args.prompt_type}")
+            if args.free_only:
+                print("Price filter: free only")
+            if args.paid_only:
+                print("Price filter: paid only")
+            if args.min_price is not None or args.max_price is not None:
+                print(f"Price range: {args.min_price}..{args.max_price}")
 
     for mode in modes:
-        filtered = filter_records(records, mode)
+        filtered = filter_records(selected_records, mode)
         output_path = write_export(
             output_dir,
             profile.username,
             mode,
             filtered,
             args.format,
+            timestamp=timestamp,
         )
         written_count = count_written_records(output_path, args.format)
         if written_count != len(filtered):
@@ -106,13 +203,16 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"Wrote {mode:>5}: {written_count:>4} prompts -> {output_path}")
+        if not args.quiet:
+            print(f"Wrote {mode:>5}: {written_count:>4} prompts -> {output_path}")
 
-    image_count = len(filter_records(records, "image"))
-    text_count = len(filter_records(records, "text"))
-    other_count = len(records) - image_count - text_count
-    print(
-        "Summary: "
-        f"text={text_count}, image={image_count}, other={other_count}, all={len(records)}"
-    )
+    image_count = len(filter_records(selected_records, "image"))
+    text_count = len(filter_records(selected_records, "text"))
+    other_count = len(selected_records) - image_count - text_count
+    if not args.quiet:
+        print(
+            "Summary: "
+            f"text={text_count}, image={image_count}, "
+            f"other={other_count}, selected={len(selected_records)}, all={len(records)}"
+        )
     return 0
