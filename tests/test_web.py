@@ -42,7 +42,7 @@ class WebTests(unittest.TestCase):
                 "until": ["2026-12-31"],
                 "timestamp_filenames": ["1"],
                 "allow_missing_descriptions": ["on"],
-                "output_dir": ["~/exports"],
+                "output_dir": ["exports/acb"],
             }
         )
 
@@ -61,6 +61,18 @@ class WebTests(unittest.TestCase):
         self.assertTrue(config.timestamp_filenames)
         self.assertTrue(config.allow_missing_descriptions)
         self.assertIsInstance(config.output_dir, Path)
+        self.assertTrue(config.output_dir.is_absolute())
+        self.assertTrue(config.output_dir.is_relative_to(Path.cwd().resolve()))
+
+    def test_build_request_config_rejects_output_dir_escape(self):
+        for escape in ("..", "../outside", "../../etc", "exports/../../secrets"):
+            with self.assertRaises(WebInputError):
+                build_request_config({"profile": "acb", "output_dir": escape})
+
+    def test_build_request_config_rejects_absolute_output_dir(self):
+        absolute = "C:\\Windows\\Temp" if Path("C:\\").exists() else "/etc"
+        with self.assertRaises(WebInputError):
+            build_request_config({"profile": "acb", "output_dir": absolute})
 
     def test_build_request_config_rejects_invalid_prices(self):
         with self.assertRaises(WebInputError):

@@ -129,7 +129,7 @@ def build_request_config(
     return ExportRequest(
         profile_input=profile_input,
         mode=mode,
-        output_dir=Path(output_dir).expanduser(),
+        output_dir=_resolve_output_dir(output_dir),
         export_format=export_format,
         sort=sort,
         domain=_single_value(form_data, "domain").strip(),
@@ -594,6 +594,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nServer stopped.", file=sys.stderr)
     return 0
+
+
+def _resolve_output_dir(raw: str) -> Path:
+    """Confine a web-submitted output directory to the server's working tree.
+
+    Unlike the CLI (which trusts the local user with arbitrary paths), the web
+    form is reachable by any page the user's browser visits, so absolute paths
+    and ``..`` traversal that would escape the working directory are rejected.
+    """
+    base = Path.cwd().resolve()
+    candidate = Path(raw).expanduser()
+    resolved = (base / candidate).resolve()
+    if not resolved.is_relative_to(base):
+        raise WebInputError(
+            "Output directory must stay within the server's working directory."
+        )
+    return resolved
 
 
 def _single_value(
