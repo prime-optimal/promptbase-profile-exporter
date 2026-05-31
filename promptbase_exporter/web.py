@@ -11,8 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import __version__
-from .cli import parse_datetime_ms
 from .client import PromptBaseError, fetch_prompts
+from .dates import parse_datetime_ms
 from .formatting import (
     EXPORT_FORMATS,
     SORT_OPTIONS,
@@ -51,6 +51,8 @@ class ExportRequest:
     limit: int | None = None
     since: str = ""
     until: str = ""
+    since_created: int | None = None
+    until_created: int | None = None
     timestamp_filenames: bool = False
     allow_missing_descriptions: bool = False
 
@@ -140,6 +142,8 @@ def build_request_config(
         limit=limit,
         since=since,
         until=until,
+        since_created=since_created,
+        until_created=until_created,
         timestamp_filenames=_as_bool(_single_value(form_data, "timestamp_filenames")),
         allow_missing_descriptions=_as_bool(
             _single_value(form_data, "allow_missing_descriptions")
@@ -163,6 +167,14 @@ def run_export(
 
     free_only = request.price_filter == "free"
     paid_only = request.price_filter == "paid"
+    # build_request_config already parses since/until to validate them; reuse
+    # those values and only parse here when a request was constructed directly.
+    since_created = request.since_created
+    if since_created is None and request.since:
+        since_created = parse_datetime_ms(request.since, end_of_day=False)
+    until_created = request.until_created
+    if until_created is None and request.until:
+        until_created = parse_datetime_ms(request.until, end_of_day=True)
     selected_records = filter_records_by_metadata(
         records,
         domains=parse_csv_option(request.domain),
@@ -171,12 +183,8 @@ def run_export(
         paid_only=paid_only,
         min_price=request.min_price,
         max_price=request.max_price,
-        since_created=parse_datetime_ms(request.since, end_of_day=False)
-        if request.since
-        else None,
-        until_created=parse_datetime_ms(request.until, end_of_day=True)
-        if request.until
-        else None,
+        since_created=since_created,
+        until_created=until_created,
     )
     if not selected_records:
         raise WebInputError("No prompts matched the selected filters.")
@@ -560,7 +568,7 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
         names = {host}
         if host in {"127.0.0.1", "0.0.0.0", "::", "::1"}:
             names |= {"127.0.0.1", "localhost", "[::1]"}
-        authorities = {name for name in names}
+        authorities = set(names)
         authorities |= {f"{name}:{port}" for name in names}
         return authorities
 
