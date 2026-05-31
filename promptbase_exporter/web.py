@@ -113,8 +113,8 @@ def build_request_config(
     limit = _parse_optional_int(form_data, "limit")
     since = _single_value(form_data, "since").strip()
     until = _single_value(form_data, "until").strip()
-    since_created = parse_datetime_ms(since, end_of_day=False) if since else None
-    until_created = parse_datetime_ms(until, end_of_day=True) if until else None
+    since_created = _parse_optional_date(since, "since", end_of_day=False)
+    until_created = _parse_optional_date(until, "until", end_of_day=True)
     if (
         since_created is not None
         and until_created is not None
@@ -129,7 +129,7 @@ def build_request_config(
     return ExportRequest(
         profile_input=profile_input,
         mode=mode,
-        output_dir=Path(output_dir).expanduser(),
+        output_dir=_resolve_output_dir(output_dir),
         export_format=export_format,
         sort=sort,
         domain=_single_value(form_data, "domain").strip(),
@@ -531,6 +531,13 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
             self._send_text("not found\n", status=404)
             return
 
+        # /export performs outbound fetches and writes files, so reject
+        # cross-origin (CSRF) and rebound-DNS requests before doing any work.
+        rejection = self._reject_unsafe_request()
+        if rejection is not None:
+            self._send_text(f"{rejection}\n", status=403)
+            return
+
         request: ExportRequest | None = None
         try:
             form = self._read_form()
@@ -547,6 +554,47 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
                 status=500,
             )
 
+    def _expected_authorities(self) -> set[str]:
+        """Host:port authorities this server legitimately answers to."""
+        host, port = self.server.server_address[0], self.server.server_address[1]
+        names = {host}
+        if host in {"127.0.0.1", "0.0.0.0", "::", "::1"}:
+            names |= {"127.0.0.1", "localhost", "[::1]"}
+        authorities = {name for name in names}
+        authorities |= {f"{name}:{port}" for name in names}
+        return authorities
+
+    def _reject_unsafe_request(self) -> str | None:
+        """Return an error string if the request is cross-origin or rebound.
+
+        Defends /export against CSRF (a page the user visits auto-submitting
+        a form to localhost) and DNS rebinding (a hostile domain re-pointed
+        at 127.0.0.1). Returns ``None`` when the request is safe to process.
+        """
+        authorities = self._expected_authorities()
+
+        # DNS-rebinding guard: the Host header must name this server.
+        host_header = (self.headers.get("Host") or "").strip()
+        if host_header and host_header not in authorities:
+            return "Host header not recognized."
+
+        # CSRF guard: trust Sec-Fetch-Site when modern browsers send it,
+        # otherwise require the Origin to match. Non-browser clients (no
+        # Origin, no Sec-Fetch-Site, no ambient credentials) are allowed.
+        fetch_site = self.headers.get("Sec-Fetch-Site")
+        if fetch_site is not None:
+            if fetch_site not in {"same-origin", "none"}:
+                return "Cross-origin requests are not allowed."
+            return None
+
+        origin = self.headers.get("Origin")
+        if origin is not None:
+            allowed = {f"http://{authority}" for authority in authorities}
+            allowed |= {f"https://{authority}" for authority in authorities}
+            if origin not in allowed:
+                return "Cross-origin requests are not allowed."
+        return None
+
     def _read_form(self) -> Mapping[str, list[str]]:
         content_length = int(self.headers.get("Content-Length") or "0")
         if content_length > MAX_FORM_BYTES:
@@ -555,25 +603,52 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
         return urllib.parse.parse_qs(body, keep_blank_values=True)
 
     def _send_html(self, body: str, *, status: int = 200) -> None:
+        self._send(body, "text/html; charset=utf-8", status=status)
+
+    def _send_text(self, body: str, *, status: int = 200) -> None:
+        self._send(body, "text/plain; charset=utf-8", status=status)
+
+    def _send(self, body: str, content_type: str, *, status: int) -> None:
         data = body.encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        # The UI uses only inline CSS and a same-origin form; deny everything
+        # else so a future markup mistake cannot load active content.
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; "
+            "form-action 'self'; base-uri 'none'",
+        )
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(data)
 
-    def _send_text(self, body: str, *, status: int = 200) -> None:
-        data = body.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(data)
+
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
+
+
+def _warn_if_exposed(host: str) -> None:
+    """Warn when binding somewhere other than loopback.
+
+    The /export endpoint is unauthenticated, writes files, and makes outbound
+    requests. On a non-loopback bind it becomes reachable by other hosts, so
+    make the exposure explicit rather than silent.
+    """
+    if host in LOOPBACK_HOSTS:
+        return
+    print(
+        f"WARNING: binding to {host!r} exposes the unauthenticated web UI "
+        "(which writes files and fetches remote data) to other hosts. "
+        "Only do this on a trusted network.",
+        file=sys.stderr,
+    )
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+    _warn_if_exposed(host)
     with ThreadingHTTPServer((host, port), PromptBaseWebHandler) as server:
         print(f"Serving PromptBase Profile Exporter at http://{host}:{port}/")
         server.serve_forever()
@@ -594,6 +669,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nServer stopped.", file=sys.stderr)
     return 0
+
+
+def _parse_optional_date(value: str, name: str, *, end_of_day: bool) -> int | None:
+    """Parse an optional ISO date, surfacing bad input as a 400, not a 500."""
+    if not value:
+        return None
+    try:
+        return parse_datetime_ms(value, end_of_day=end_of_day)
+    except ValueError as exc:
+        raise WebInputError(f"{name.title()} date is invalid: {exc}") from exc
+
+
+def _resolve_output_dir(raw: str) -> Path:
+    """Confine a web-submitted output directory to the server's working tree.
+
+    Unlike the CLI (which trusts the local user with arbitrary paths), the web
+    form is reachable by any page the user's browser visits, so absolute paths
+    and ``..`` traversal that would escape the working directory are rejected.
+    """
+    base = Path.cwd().resolve()
+    candidate = Path(raw).expanduser()
+    resolved = (base / candidate).resolve()
+    if not resolved.is_relative_to(base):
+        raise WebInputError(
+            "Output directory must stay within the server's working directory."
+        )
+    return resolved
 
 
 def _single_value(
