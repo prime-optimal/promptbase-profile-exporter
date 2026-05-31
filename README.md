@@ -16,7 +16,7 @@ only the same public data the PromptBase website serves.
 a clear catalog of their PromptBase listings.
 
 ```bash
-# No install required — clone and run:
+# No dependencies to install — clone the repo, then run:
 python -m promptbase_exporter https://promptbase.com/profile/acb
 # -> writes exports/acb_all_prompts.txt, acb_text_prompts.txt, acb_image_prompts.txt
 ```
@@ -447,15 +447,16 @@ repository on GitHub before pushing.
   pull_request_template.md
   workflows/
     tests.yml                 # lint, unit tests, and packaging checks
-    publish.yml               # PyPI trusted publishing on release
 promptbase_exporter/
   __init__.py
   __main__.py                 # `python -m promptbase_exporter` entry point
   cli.py                      # command-line interface and argument parsing
   client.py                   # public PromptBase/Firestore data access
+  dates.py                    # shared date/datetime parsing
   diffing.py                  # catalog comparison and diff reports
   formatting.py               # filtering, sorting, and output writers
   models.py                   # Profile and PromptRecord data types
+  py.typed                    # PEP 561 marker exposing type hints
   web.py                      # local web UI
 tests/
   test_cli.py

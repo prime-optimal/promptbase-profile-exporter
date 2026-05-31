@@ -11,6 +11,12 @@ All notable changes to this project will be documented in this file.
 - Reuse the dates the web layer already parsed for validation instead of
   parsing `since`/`until` a second time during export.
 
+### Removed
+
+- Drop the PyPI publish workflow. The tool is used by cloning the repository or
+  pinning the GitHub Action to a release tag, so it no longer ships a failing
+  publish job; see `RELEASE.md` for how to re-add PyPI distribution later.
+
 ### Internal
 
 - Ship a `py.typed` marker so downstream type checkers see the package's hints.
