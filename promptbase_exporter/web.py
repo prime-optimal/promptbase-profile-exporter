@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 import sys
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
@@ -41,6 +42,16 @@ DOWNLOAD_CONTENT_TYPES = {
     ".json": "application/json; charset=utf-8",
     ".csv": "text/csv; charset=utf-8",
 }
+
+# Names that write_export actually produces:
+# "<username>_<mode>_prompts[_YYYYMMDD_HHMMSS].<ext>". The /download endpoint
+# only serves files matching this, so it cannot disclose unrelated
+# supported-extension files (e.g. a stray secrets.json) in the working
+# directory, even when the server is exposed with --host 0.0.0.0.
+_EXPORT_FILENAME_RE = re.compile(
+    r"^[A-Za-z0-9_.-]+_(?:all|text|image)_prompts(?:_\d{8}_\d{6})?"
+    r"\.(?:txt|md|json|csv)$"
+)
 
 
 class WebInputError(ValueError):
@@ -581,11 +592,12 @@ class PromptBaseWebHandler(BaseHTTPRequestHandler):
         if not candidate.is_relative_to(base) or not candidate.is_file():
             self._send_text("not found\n", status=404)
             return
-        content_type = DOWNLOAD_CONTENT_TYPES.get(candidate.suffix.lower())
-        if content_type is None:
-            self._send_text("unsupported file type\n", status=403)
+        # Only serve files this tool actually exports, not any supported-
+        # extension file that happens to be in the working directory.
+        if not _EXPORT_FILENAME_RE.match(candidate.name):
+            self._send_text("not found\n", status=404)
             return
-
+        content_type = DOWNLOAD_CONTENT_TYPES[candidate.suffix.lower()]
         self._send_download(candidate.read_bytes(), candidate.name, content_type)
 
     def do_POST(self) -> None:

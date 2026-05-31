@@ -7,8 +7,10 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Add a `/download` link for each generated file in the web UI. The endpoint
-  only serves export files inside the server's working directory, so it cannot
-  read arbitrary paths.
+  only serves files inside the server's working directory whose names match the
+  exporter's own pattern, so it cannot read arbitrary paths or unrelated
+  supported-extension files (such as a stray `secrets.json`) even when exposed
+  with `--host 0.0.0.0`.
 
 ### Changed
 
