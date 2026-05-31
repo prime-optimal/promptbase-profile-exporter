@@ -193,6 +193,21 @@ If installed with the project script:
 promptbase-export-web
 ```
 
+### Web UI security model
+
+The web UI is intended for **local, single-user** use:
+
+- It binds to `127.0.0.1` (loopback) by default and is unauthenticated.
+  The `/export` endpoint fetches remote data and writes files, so do not
+  expose it to untrusted networks. Passing `--host 0.0.0.0` prints a
+  warning because it makes that endpoint reachable by other hosts.
+- Requests to `/export` are checked for a matching `Host` header and a
+  same-origin `Origin`/`Sec-Fetch-Site`, mitigating CSRF and DNS-rebinding
+  from pages opened in your browser.
+- Exports are confined to the directory the server was started in. Absolute
+  paths and `..` traversal in the "Output directory" field are rejected.
+  (The CLI, which you run yourself, still accepts arbitrary paths.)
+
 ## Output Formats
 
 The default `.txt` file uses a simple numbered format:

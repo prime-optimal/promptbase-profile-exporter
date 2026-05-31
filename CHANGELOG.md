@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Security
+
+- Confine web UI exports to the server's working directory; reject absolute
+  paths and `..` traversal in the output directory field.
+- Reject cross-origin (CSRF) and rebound-DNS requests on `POST /export` via
+  `Host` and `Origin`/`Sec-Fetch-Site` checks.
+- Add `Content-Security-Policy`, `X-Frame-Options`, and `Referrer-Policy`
+  headers to web responses.
+- Warn when the web server binds to a non-loopback host.
+- Pin GitHub Actions to commit SHAs and scope the test workflow token to
+  `contents: read`.
+
+### Fixed
+
+- Return HTTP 400 (not 500) for invalid `since`/`until` dates in the web UI.
+
+### Internal
+
+- Remove the unused offset-pagination path in the Firestore client and add
+  retry-path test coverage.
+
 ## 0.6.0
 
 - Add catalog comparison with `--compare`, `--diff-output`, and `--fail-on-diff`.
