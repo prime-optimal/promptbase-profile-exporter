@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(python -m ruff:*)",
+      "Bash(python -m mypy:*)",
+      "Bash(python -m coverage:*)",
+      "Bash(python -m unittest:*)",
+      "Bash(python -m build:*)",
+      "Bash(python -m twine:*)",
+      "Bash(python -m pip install -e:*)",
+      "Bash(python -m promptbase_exporter:*)",
+      "Bash(python -m promptbase_exporter.web:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git switch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/lint_changed.py"
+          }
+        ]
+      }
+    ]
+  }
+}
