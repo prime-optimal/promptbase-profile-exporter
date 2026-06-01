@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/lint_changed.py"
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint_changed.py\""
           }
         ]
       }
