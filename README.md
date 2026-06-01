@@ -452,6 +452,7 @@ repository on GitHub before pushing.
 ## Repository structure
 
 ```text
+.claude/                      # Claude Code project config (settings, skills, agents, hooks)
 .github/
   ISSUE_TEMPLATE/             # bug report and feature request templates
   dependabot.yml              # weekly GitHub Actions update checks
@@ -480,6 +481,7 @@ tests/
 docs/
   github-action.md            # GitHub Action usage guide
 action.yml                    # composite GitHub Action definition
+CLAUDE.md                     # repo guide for Claude Code
 pyproject.toml
 requirements.txt
 CHANGELOG.md
