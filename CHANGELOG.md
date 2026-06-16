@@ -32,6 +32,14 @@ All notable changes to this project will be documented in this file.
   pinning the GitHub Action to a release tag, so it no longer ships a failing
   publish job; see `RELEASE.md` for how to re-add PyPI distribution later.
 
+### Fixed
+
+- Build the wheel reliably when a generated `exports/` directory is present.
+  setuptools' flat-layout auto-discovery treated `exports/` as a second
+  top-level package and aborted with `Multiple top-level packages discovered`,
+  breaking `pip install .` / `uv tool install .` from a working tree that had
+  already produced exports. The package list is now declared explicitly.
+
 ### Internal
 
 - Ship a `py.typed` marker so downstream type checkers see the package's hints.

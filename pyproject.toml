@@ -40,6 +40,11 @@ pb-web = "promptbase_exporter.web:main"
 [project.optional-dependencies]
 dev = ["build", "coverage", "mypy", "ruff", "twine"]
 
+# Declare the package explicitly so setuptools' flat-layout auto-discovery
+# doesn't choke on sibling top-level dirs (e.g. a generated `exports/`).
+[tool.setuptools]
+packages = ["promptbase_exporter"]
+
 [tool.setuptools.package-data]
 promptbase_exporter = ["py.typed"]
 
