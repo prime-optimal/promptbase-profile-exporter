@@ -33,6 +33,9 @@ Issues = "https://github.com/IACBI/promptbase-profile-exporter/issues"
 [project.scripts]
 promptbase-export = "promptbase_exporter.cli:main"
 promptbase-export-web = "promptbase_exporter.web:main"
+# Short aliases for the same entry points (e.g. `uv tool install .` then `pb`).
+pb = "promptbase_exporter.cli:main"
+pb-web = "promptbase_exporter.web:main"
 
 [project.optional-dependencies]
 dev = ["build", "coverage", "mypy", "ruff", "twine"]

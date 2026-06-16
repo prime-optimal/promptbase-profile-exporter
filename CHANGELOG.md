@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Add short `pb` and `pb-web` console-script aliases for `promptbase-export`
+  and `promptbase-export-web`. The long names are unchanged, so existing
+  scripts and the GitHub Action keep working; the aliases just make the tool
+  pleasant to install and run with `uv tool install .` (then `pb @acb`).
 - Add a `/download` link for each generated file in the web UI. The endpoint
   only serves files inside the server's working directory whose names match the
   exporter's own pattern, so it cannot read arbitrary paths or unrelated
