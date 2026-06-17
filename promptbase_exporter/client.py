@@ -224,7 +224,10 @@ def _firestore_cursor_value(value: Any) -> dict[str, Any]:
 
 def resolve_profile(profile_input: str) -> Profile:
     username = parse_profile_input(profile_input)
-    docs = _run_query(
+
+    # Preferred path: the profile document itself carries the username field
+    # (for example @acb). Its document id is the owner uid.
+    profile_docs = _run_query(
         "Items",
         [
             field_filter("username", "EQUAL", {"stringValue": username}),
@@ -232,29 +235,46 @@ def resolve_profile(profile_input: str) -> Profile:
         ],
         limit=5,
     )
-    if not docs:
+    uid = _distinct_uid_for_username(profile_docs, username)
+    if uid:
+        return Profile(username=username, uid=uid)
+
+    # Fallback: PromptBase does not always store the username field on the
+    # profile document (it can be absent, as for @emanema / @dreamydesigns), so
+    # the profile-only query above returns nothing. Every prompt/app/bundle the
+    # profile owns does carry the username alongside the same owner uid, so we
+    # resolve the uid from any owned item instead.
+    owned_docs = _run_query(
+        "Items",
+        [field_filter("username", "EQUAL", {"stringValue": username})],
+        limit=10,
+    )
+    if not owned_docs:
         raise PromptBaseError(f"Profile not found: {username}")
+    uid = _distinct_uid_for_username(owned_docs, username)
+    if not uid:
+        raise PromptBaseError(f"Profile UID could not be resolved: {username}")
+    return Profile(username=username, uid=uid)
 
-    matching_docs = [
-        doc for doc in docs if str(doc.get("username") or "").strip() == username
-    ]
-    if not matching_docs:
-        raise PromptBaseError(f"Profile not found with exact username: {username}")
 
-    uid_by_doc = [
-        str(uid)
-        for doc in matching_docs
-        if (uid := doc.get("uid") or doc.get("id") or doc.get("itemId"))
-    ]
-    distinct_uids = sorted(set(uid_by_doc))
+def _distinct_uid_for_username(docs: list[dict[str, Any]], username: str) -> str:
+    """Return the single owner uid for an exact-username match, or "" if none.
+
+    Raises if the documents disagree on which uid owns the username.
+    """
+    matching_docs = [doc for doc in docs if str(doc.get("username") or "").strip() == username]
+    distinct_uids = sorted(
+        {
+            str(uid)
+            for doc in matching_docs
+            if (uid := doc.get("uid") or doc.get("id") or doc.get("itemId"))
+        }
+    )
     if len(distinct_uids) > 1:
         raise PromptBaseError(
             f"Ambiguous profile lookup for {username}: multiple profile UIDs matched."
         )
-    uid = distinct_uids[0] if distinct_uids else ""
-    if not uid:
-        raise PromptBaseError(f"Profile UID could not be resolved: {username}")
-    return Profile(username=username, uid=uid)
+    return distinct_uids[0] if distinct_uids else ""
 
 
 def fetch_prompt_items(profile: Profile) -> list[dict[str, Any]]:

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Resolve profiles whose PromptBase profile document has no `username` field
+  (for example `@emanema` and `@dreamydesigns`), which previously failed with
+  "Profile not found" even though the profile and its prompts are public. The
+  owner uid is now recovered from any prompt/app/bundle the profile owns when
+  the profile document itself lacks the username.
+
 ### Added
 
 - Add short `pb` and `pb-web` console-script aliases for `promptbase-export`
