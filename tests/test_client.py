@@ -170,6 +170,46 @@ class ResolveProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(PromptBaseError, "Ambiguous profile"):
                 resolve_profile("@acb")
 
+    def test_resolve_profile_uses_profile_doc_without_fallback(self):
+        with patch(
+            "promptbase_exporter.client._run_query",
+            side_effect=[
+                [{"username": "acb", "itemType": "profile", "uid": "uid-1"}],
+            ],
+        ) as run_query:
+            profile = resolve_profile("@acb")
+
+        self.assertEqual(profile, Profile(username="acb", uid="uid-1"))
+        # The profile document carried the username, so no fallback query runs.
+        self.assertEqual(run_query.call_count, 1)
+
+    def test_resolve_profile_falls_back_when_profile_doc_lacks_username(self):
+        # The profile-only query returns nothing because PromptBase left the
+        # username field off the profile document; the owner uid is recovered
+        # from the prompts/apps the profile owns.
+        with patch(
+            "promptbase_exporter.client._run_query",
+            side_effect=[
+                [],
+                [
+                    {"username": "emanema", "itemType": "prompt", "uid": "uid-9"},
+                    {"username": "emanema", "itemType": "app", "uid": "uid-9"},
+                ],
+            ],
+        ) as run_query:
+            profile = resolve_profile("https://promptbase.com/profile/emanema")
+
+        self.assertEqual(profile, Profile(username="emanema", uid="uid-9"))
+        self.assertEqual(run_query.call_count, 2)
+
+    def test_resolve_profile_raises_when_no_items_found(self):
+        with patch(
+            "promptbase_exporter.client._run_query",
+            side_effect=[[], []],
+        ):
+            with self.assertRaisesRegex(PromptBaseError, "Profile not found: ghost"):
+                resolve_profile("@ghost")
+
 
 class RetryTests(unittest.TestCase):
     @staticmethod
